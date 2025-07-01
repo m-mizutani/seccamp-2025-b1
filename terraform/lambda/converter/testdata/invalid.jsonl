@@ -1,0 +1,4 @@
+{"id":"log001","timestamp":"invalid-timestamp","user":"alice","action":"login","target":"","success":true,"remote":"192.168.1.100"}
+{"id":"log002","missing_timestamp":true,"user":"bob","action":"read","target":"document1.txt","success":true,"remote":"192.168.1.101"}
+invalid json line
+{"id":"log004","timestamp":"2023-12-01T10:15:00Z","user":"","action":"login","target":"","success":"not_boolean","remote":"192.168.1.103"} 

@@ -1,99 +1,165 @@
-# 実習環境とSecurity Lake概要
+# クラウド監視環境のアーキテクチャ
 
-## 🛠️ 実習環境の構成
+## 🏗️ 一般的なログ分析アーキテクチャ
 
-### 事前準備済みの環境
+### 基本的なデータフロー
 
-**アーキテクチャ概要**
-```
-データソース → Security Lake → 検知・分析
-├─ CloudTrail      ├─ OCSF正規化    ├─ Athena クエリ
-├─ VPC Flow Logs   ├─ S3 保存       ├─ Lambda 検知
-└─ DNS Logs        └─ パーティション └─ SNS 通知
-```
+**ログ収集・分析の標準パターン**
 
-**主要コンポーネント**
-- **Security Lake**: AWS マネージドサービス、OCSF標準フォーマット
-- **データソース**: CloudTrail、VPC Flow Logs、DNS Logs
-- **検知基盤**: Athena + Lambda (Go) + SNS
-
-**権限設定**
-- Security Lake読み取り権限
-- Athena実行権限  
-- SNS発行権限
-
-## 📊 Security Lake とは
-
-### AWS Security Lake の特徴
-
-**OCSF (Open Cybersecurity Schema Framework) 標準化**
-- **統一フォーマット**: 異なるデータソースを標準スキーマに正規化
-- **SQL分析効率化**: 統一されたフィールド名でのクエリ作成
-- **マルチベンダー対応**: AWS、Azure、GCP等のクラウド横断分析
-
-**基本的なOCSF構造**
-```json
-{
-  "time": 1691836800000,
-  "class_uid": 4001,
-  "activity_id": 1,
-  "src_endpoint": {"ip": "10.0.1.100"},
-  "dst_endpoint": {"ip": "203.0.113.10"},
-  "connection_info": {"protocol_name": "TCP"}
-}
-```
-
-### データ保存とパーティション
-
-**S3上の効率的データ構造**
-```
-s3://security-lake-bucket/
-├── aws-cloudtrail-logs/
-│   └── region=us-east-1/year=2024/month=08/day=12/
-├── vpc-flow-logs/
-└── dns-logs/
+```mermaid
+graph LR
+    subgraph "データソース"
+        DS1[("アプリケーション")]
+        DS2[("インフラ")]
+        DS3[("外部API")]
+        DS4[("セキュリティ機器")]
+    end
+    
+    subgraph "データ処理基盤"
+        ST1[["Raw Data Store<br/>(Object Storage)"]]
+        SV1["ETL Service<br/>(Serverless Functions)"]
+        ST2[["Data Warehouse<br/>(DWH/BigQuery)"]]
+        SV2["Analytics Service<br/>(Query Engine)"]
+    end
+    
+    subgraph "セキュリティ運用"
+        SV3["Detection Service<br/>(Rule Engine + Management)"]
+        SV6["Incident Service<br/>(Ticket Management)"]
+        SV7["SOAR Service<br/>(Automation)"]
+        SV8["Investigation Service<br/>(SOC Tools)"]
+    end
+    
+    DS1 --> ST1
+    DS2 --> ST1
+    DS3 --> ST1  
+    DS4 --> ST1
+    
+    ST1 --> SV1
+    SV1 --> ST2
+    ST2 --> SV2
+    SV2 --> SV3
+    
+    SV3 --> SV6
+    SV6 --> SV7
+    SV7 --> SV8
+    
+    SV8 -.-> SV3
 ```
 
-**Parquet形式の利点**
-- **圧縮効率**: JSON比75%削減
-- **クエリ高速化**: 7.5倍高速  
-- **コスト削減**: ストレージ・クエリ両方でコスト削減
+**図の見方**
+- **○ データソース**: ログの発生源
+- **⬜ Service**: 処理・機能を提供するサービス
+- **⬛ Storage**: データを保存するストレージ
+- **→ データフロー**: データの主要な流れ
+- **⇢ フィードバック**: 改善・強化のループ
 
-## 🎯 本日の実習で使用するデータ
+**クラウド横断での共通概念**
+- **オブジェクトストレージ**: AWS S3 / Azure Blob / GCP Cloud Storage
+- **サーバーレス処理**: AWS Lambda / Azure Functions / GCP Cloud Functions  
+- **データウェアハウス**: AWS Redshift / Azure Synapse / GCP BigQuery
 
-### 実習用サンプルデータ
+### アーキテクチャの構成要素
 
-**VPC Flow Logs (ネットワーク通信)**
-- **src_endpoint**: 送信元IP・ポート
-- **dst_endpoint**: 宛先IP・ポート  
-- **connection_info**: プロトコル・バイト数・パケット数
-- **disposition**: 通信許可/拒否
+#### 1. データ収集層
 
-**DNS Logs (DNS解決)**
-- **query**: ドメイン名・クエリタイプ
-- **answer**: 解決されたIPアドレス
-- **response_time**: 応答時間
+**ログソースの分類**
+- **システムログ**: OS、ミドルウェア、アプリケーションログ
+- **セキュリティログ**: 認証、API呼び出し、ネットワーク通信
+- **運用ログ**: 設定変更、デプロイ、パフォーマンス指標
 
-**CloudTrail Logs (API呼び出し)**
-- **actor**: 実行ユーザー・ロール
-- **api**: 呼び出されたAPIとパラメータ  
-- **target_resource**: 操作対象リソース
+**収集方式**
+- **プッシュ型**: ログ転送エージェント（FluentD、Logstash等）
+- **プル型**: API経由での定期取得
+- **ストリーム型**: リアルタイムデータストリーム
 
-### 実習で作成する検知ルール
+#### 2. データ保存層（オブジェクトストレージ）
 
-**1. 異常なネットワーク通信検知**
-- 通常と異なる大量データ転送
-- 業務時間外の通信パターン
+**Raw Data Storage**
+```
+s3://logs-raw-bucket/
+├── application-logs/date=2024-08-12/
+├── security-logs/date=2024-08-12/
+└── infrastructure-logs/date=2024-08-12/
+```
 
-**2. 特権操作の監視**
-- 管理者権限での異常な操作
-- 重要リソースへの不正アクセス
+**保存形式の選択肢**
+- **JSON**: 可読性高、クエリコスト高
+- **Parquet**: 圧縮効率・クエリ速度最適化
+- **Avro**: スキーマ進化に対応
 
-**3. DNS異常パターン検知**
-- DGA（自動生成）ドメインへのクエリ
-- 異常に大きなDNSクエリ
+#### 3. ETL処理層（サーバーレス関数）
+
+**変換処理の典型例**
+```python
+# 擬似コード例
+def lambda_handler(event, context):
+    # Raw JSONログを読み取り
+    raw_log = read_from_s3(event['Records'])
+    
+    # 正規化・構造化
+    normalized = normalize_log_format(raw_log)
+    
+    # フィルタリング・集約
+    filtered = apply_security_filters(normalized)
+    
+    # 構造化データとして保存
+    write_to_s3_structured(filtered)
+```
+
+**処理のポイント**
+- **スキーマ正規化**: 異なるソースからの統一フォーマット作成
+- **データ品質向上**: 欠損値補完、異常値検知
+- **パフォーマンス最適化**: パーティション設計、圧縮
+
+#### 4. データウェアハウス層
+
+**分析・検索エンジンの役割**
+- **高速SQL処理**: 大量データに対する集計・分析クエリ
+- **リアルタイム検索**: 秒単位での異常検知
+- **長期保存**: 法規制対応、トレンド分析
+
+**主要サービス比較**
+
+| プラットフォーム | サービス名 | 特徴 | 適用場面 |
+|---------------|-----------|------|----------|
+| **AWS** | Redshift | カラムナ DB、大規模バッチ処理 | 定期レポート、長期分析 |
+| | Athena | サーバーレス、S3直接クエリ | アドホック分析、コスト重視 |
+| **Azure** | Synapse Analytics | 統合分析プラットフォーム | エンタープライズ分析基盤 |
+| **GCP** | BigQuery | フルマネージド、ML統合 | リアルタイム分析、機械学習 |
+
+## 🎯 実装時の考慮事項
+
+### パフォーマンス最適化
+
+**パーティション設計**
+- **時間ベース**: `date=2024-08-12/hour=14/`
+- **地域ベース**: `region=us-east-1/`
+- **ログタイプ別**: `log_type=security/`
+
+**クエリ最適化**
+```sql
+-- 効率的なクエリ例
+SELECT source_ip, COUNT(*) as connection_count
+FROM network_logs 
+WHERE date >= '2024-08-12' 
+  AND log_type = 'vpc_flow'
+GROUP BY source_ip
+HAVING connection_count > 1000
+```
+
+### セキュリティ・ガバナンス
+
+**アクセス制御**
+- **IAMロール**: 最小権限の原則
+- **データ分類**: 機密度に応じたアクセス制限
+- **監査ログ**: データアクセス履歴の記録
+
+**コンプライアンス対応**
+- **データ保持期間**: 法規制要件への対応
+- **暗号化**: 転送時・保存時の暗号化
+- **地域制限**: データ保存場所の制御
 
 ---
 
 **🎯 次のステップ**  
-実際にGo言語でLambda関数を実装し、これらの検知ルールを作成します！ 
+実際にGo言語でLambda関数を実装し、このアーキテクチャ上で検知ルールを作成します！ 
