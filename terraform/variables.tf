@@ -19,5 +19,5 @@ variable "enable_external_subscriber" {
 variable "teams" {
   description = "List of team names"
   type        = list(string)
-  default     = ["blue"]  # Start with one team for testing
+  default     = ["blue", "green"]  # Start with one team for testing
 }
