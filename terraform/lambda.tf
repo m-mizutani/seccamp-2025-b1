@@ -43,7 +43,7 @@ data "archive_file" "converter_lambda_zip" {
 
 # IAM Role for Converter Lambda
 resource "aws_iam_role" "converter_lambda" {
-  name = "LambdaImporterRole"
+  name = "lambda-importer-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -59,7 +59,7 @@ resource "aws_iam_role" "converter_lambda" {
   })
 
   tags = merge(local.common_tags, {
-    Name = "LambdaImporterRole"
+    Name = "lambda-importer-role"
     Type = "lambda-role"
   })
 }
@@ -72,7 +72,7 @@ resource "aws_iam_role_policy_attachment" "converter_lambda_basic" {
 
 # SQS read permissions for converter Lambda
 resource "aws_iam_policy" "converter_lambda_sqs" {
-  name        = "LambdaImporterSQSPolicy"
+  name        = "lambda-importer-sqs-policy"
   description = "SQS permissions for converter Lambda"
 
   policy = jsonencode({
@@ -98,7 +98,7 @@ resource "aws_iam_role_policy_attachment" "converter_lambda_sqs" {
 
 # S3 permissions for converter Lambda
 resource "aws_iam_policy" "converter_lambda_s3" {
-  name        = "LambdaImporterS3Policy"
+  name        = "lambda-importer-s3-policy"
   description = "S3 permissions for converter Lambda"
 
   policy = jsonencode({
@@ -165,121 +165,7 @@ resource "aws_lambda_event_source_mapping" "converter_sqs" {
   batch_size       = 1
 }
 
-###########################################
-# Detector Lambda (Alert detection)
-###########################################
 
-# IAM Role for Detector Lambda
-resource "aws_iam_role" "detector_lambda" {
-  name = "LambdaDetectorRole"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "lambda.amazonaws.com"
-        }
-      }
-    ]
-  })
-
-  tags = merge(local.common_tags, {
-    Name = "LambdaDetectorRole"
-    Type = "lambda-role"
-  })
-}
-
-# Basic Lambda execution role for detector
-resource "aws_iam_role_policy_attachment" "detector_lambda_basic" {
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-  role       = aws_iam_role.detector_lambda.name
-}
-
-# Athena permissions for detector Lambda
-resource "aws_iam_policy" "detector_lambda_athena" {
-  name        = "LambdaDetectorAthenaPolicy"
-  description = "Athena permissions for detector Lambda"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "athena:StartQueryExecution",
-          "athena:GetQueryExecution",
-          "athena:GetQueryResults",
-          "athena:StopQueryExecution"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:ListBucket"
-        ]
-        Resource = [
-          "arn:aws:s3:::aws-security-data-lake-${var.aws_region}-${data.aws_caller_identity.current.account_id}",
-          "arn:aws:s3:::aws-security-data-lake-${var.aws_region}-${data.aws_caller_identity.current.account_id}/*"
-        ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:PutObject",
-          "s3:GetObject",
-          "s3:ListBucket"
-        ]
-        Resource = [
-          "arn:aws:s3:::${var.basename}-athena-results",
-          "arn:aws:s3:::${var.basename}-athena-results/*"
-        ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "glue:GetDatabase",
-          "glue:GetTable",
-          "glue:GetPartitions"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "detector_lambda_athena" {
-  policy_arn = aws_iam_policy.detector_lambda_athena.arn
-  role       = aws_iam_role.detector_lambda.name
-}
-
-# SNS permissions for detector Lambda
-resource "aws_iam_policy" "detector_lambda_sns" {
-  name        = "LambdaDetectorSNSPolicy"
-  description = "SNS permissions for detector Lambda"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "sns:Publish"
-        ]
-        Resource = aws_sns_topic.alerts.arn
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "detector_lambda_sns" {
-  policy_arn = aws_iam_policy.detector_lambda_sns.arn
-  role       = aws_iam_role.detector_lambda.name
-}
 
 # S3 bucket for Athena query results
 resource "aws_s3_bucket" "athena_results" {

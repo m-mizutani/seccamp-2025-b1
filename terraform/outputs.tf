@@ -32,6 +32,8 @@ output "teams" {
       raw_logs_sqs_queue_arn        = team_module.raw_logs_sqs_queue_arn
       converter_lambda_function_arn = team_module.converter_lambda_function_arn
       converter_iam_role_name       = team_module.converter_iam_role_name
+      importer_iam_role_name        = team_module.importer_iam_role_name
+      detector_iam_role_name        = team_module.detector_iam_role_name
       custom_log_source_name        = team_module.custom_log_source_name
     }
   }

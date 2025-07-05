@@ -38,8 +38,6 @@ output "converter_lambda_function_arn" {
   value       = aws_lambda_function.converter.arn
 }
 
-
-
 output "converter_iam_role_name" {
   description = "Name of the converter Lambda IAM role"
   value       = aws_iam_role.converter_lambda.name
@@ -50,7 +48,25 @@ output "converter_iam_role_arn" {
   value       = aws_iam_role.converter_lambda.arn
 }
 
+output "importer_iam_role_name" {
+  description = "Name of the importer Lambda IAM role"
+  value       = aws_iam_role.importer_lambda.name
+}
 
+output "importer_iam_role_arn" {
+  description = "ARN of the importer Lambda IAM role"
+  value       = aws_iam_role.importer_lambda.arn
+}
+
+output "detector_iam_role_name" {
+  description = "Name of the detector Lambda IAM role"
+  value       = aws_iam_role.detector_lambda.name
+}
+
+output "detector_iam_role_arn" {
+  description = "ARN of the detector Lambda IAM role"
+  value       = aws_iam_role.detector_lambda.arn
+}
 
 output "custom_log_source_name" {
   description = "Name of the custom log source"
