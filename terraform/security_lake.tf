@@ -112,6 +112,54 @@ resource "aws_securitylake_custom_log_source" "app_logs" {
   depends_on = [aws_securitylake_data_lake.main]
 }
 
+# Import and manage the existing Glue Crawler created by Security Lake
+resource "aws_glue_crawler" "security_lake_custom_source" {
+  name          = "test-source"
+  database_name = "amazon_security_lake_glue_db_${replace(var.aws_region, "-", "_")}"
+  role          = aws_iam_role.security_lake_crawler.arn
+
+  catalog_target {
+    database_name = "amazon_security_lake_glue_db_${replace(var.aws_region, "-", "_")}"
+    tables        = ["amazon_security_lake_table_${replace(var.aws_region, "-", "_")}_ext_test_source_1_0"]
+  }
+
+  schedule = "cron(0 0 * * ? *)"  # Daily at midnight UTC
+
+  schema_change_policy {
+    update_behavior = "UPDATE_IN_DATABASE"
+    delete_behavior = "LOG"
+  }
+
+  recrawl_policy {
+    recrawl_behavior = "CRAWL_EVERYTHING"
+  }
+
+  lineage_configuration {
+    crawler_lineage_settings = "DISABLE"
+  }
+
+  configuration = jsonencode({
+    Version = 1.0
+    Grouping = {
+      TableGroupingPolicy = "CombineCompatibleSchemas"
+    }
+  })
+
+  lake_formation_configuration {
+    use_lake_formation_credentials = false
+  }
+
+  depends_on = [
+    aws_securitylake_custom_log_source.app_logs,
+    aws_securitylake_data_lake.main
+  ]
+
+  tags = merge(local.common_tags, {
+    Name = "test-source-glue-crawler"
+    Type = "glue-crawler"
+  })
+}
+
 # Random ID for external ID
 resource "random_id" "external_id" {
   byte_length = 8

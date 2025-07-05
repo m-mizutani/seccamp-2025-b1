@@ -2,20 +2,39 @@
 # Lambda Functions
 ###########################################
 
+# Build converter Lambda binary
+resource "null_resource" "build_converter" {
+  triggers = {
+    source_hash = data.archive_file.converter_source.output_base64sha256
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      cd ${path.module}/lambda/converter
+      GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap main.go types.go s3_interface.go
+    EOT
+    environment = {
+      PAGER = ""
+    }
+  }
+}
+
+# Archive source files for trigger detection
+data "archive_file" "converter_source" {
+  type        = "zip"
+  source_dir  = "${path.module}/lambda/converter"
+  output_path = "${path.module}/lambda/converter_source.zip"
+  excludes    = ["*.zip", "go.sum", "bootstrap", "*_test.go", "testdata"]
+}
+
 # Archive file for converter Lambda
 data "archive_file" "converter_lambda_zip" {
   type        = "zip"
   source_dir  = "${path.module}/lambda/converter"
   output_path = "${path.module}/lambda/converter.zip"
-  excludes    = ["*.zip", "go.sum"]
-}
+  excludes    = ["*.zip", "go.sum", "*_test.go", "testdata", "go.mod"]
 
-# Archive file for detector Lambda
-data "archive_file" "detector_lambda_zip" {
-  type        = "zip"
-  source_dir  = "${path.module}/lambda/detector"
-  output_path = "${path.module}/lambda/detector.zip"
-  excludes    = ["*.zip", "go.sum"]
+  depends_on = [null_resource.build_converter]
 }
 
 ###########################################
@@ -24,7 +43,7 @@ data "archive_file" "detector_lambda_zip" {
 
 # IAM Role for Converter Lambda
 resource "aws_iam_role" "converter_lambda" {
-  name = "${var.basename}-converter-lambda-role"
+  name = "LambdaImporterRole"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -40,7 +59,7 @@ resource "aws_iam_role" "converter_lambda" {
   })
 
   tags = merge(local.common_tags, {
-    Name = "${var.basename}-converter-lambda-role"
+    Name = "LambdaImporterRole"
     Type = "lambda-role"
   })
 }
@@ -53,7 +72,7 @@ resource "aws_iam_role_policy_attachment" "converter_lambda_basic" {
 
 # SQS read permissions for converter Lambda
 resource "aws_iam_policy" "converter_lambda_sqs" {
-  name        = "${var.basename}-converter-lambda-sqs-policy"
+  name        = "LambdaImporterSQSPolicy"
   description = "SQS permissions for converter Lambda"
 
   policy = jsonencode({
@@ -79,7 +98,7 @@ resource "aws_iam_role_policy_attachment" "converter_lambda_sqs" {
 
 # S3 permissions for converter Lambda
 resource "aws_iam_policy" "converter_lambda_s3" {
-  name        = "${var.basename}-converter-lambda-s3-policy"
+  name        = "LambdaImporterS3Policy"
   description = "S3 permissions for converter Lambda"
 
   policy = jsonencode({
@@ -116,6 +135,7 @@ resource "aws_lambda_function" "converter" {
   handler          = "main"
   source_code_hash = data.archive_file.converter_lambda_zip.output_base64sha256
   runtime          = "provided.al2"
+  architectures    = ["arm64"]
   timeout          = 300
   memory_size      = 512
 
@@ -151,7 +171,7 @@ resource "aws_lambda_event_source_mapping" "converter_sqs" {
 
 # IAM Role for Detector Lambda
 resource "aws_iam_role" "detector_lambda" {
-  name = "${var.basename}-detector-lambda-role"
+  name = "LambdaDetectorRole"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -167,7 +187,7 @@ resource "aws_iam_role" "detector_lambda" {
   })
 
   tags = merge(local.common_tags, {
-    Name = "${var.basename}-detector-lambda-role"
+    Name = "LambdaDetectorRole"
     Type = "lambda-role"
   })
 }
@@ -180,7 +200,7 @@ resource "aws_iam_role_policy_attachment" "detector_lambda_basic" {
 
 # Athena permissions for detector Lambda
 resource "aws_iam_policy" "detector_lambda_athena" {
-  name        = "${var.basename}-detector-lambda-athena-policy"
+  name        = "LambdaDetectorAthenaPolicy"
   description = "Athena permissions for detector Lambda"
 
   policy = jsonencode({
@@ -239,7 +259,7 @@ resource "aws_iam_role_policy_attachment" "detector_lambda_athena" {
 
 # SNS permissions for detector Lambda
 resource "aws_iam_policy" "detector_lambda_sns" {
-  name        = "${var.basename}-detector-lambda-sns-policy"
+  name        = "LambdaDetectorSNSPolicy"
   description = "SNS permissions for detector Lambda"
 
   policy = jsonencode({
@@ -279,62 +299,3 @@ resource "aws_s3_bucket_public_access_block" "athena_results" {
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
-
-# Detector Lambda function
-resource "aws_lambda_function" "detector" {
-  filename         = data.archive_file.detector_lambda_zip.output_path
-  function_name    = "${var.basename}-detector"
-  role             = aws_iam_role.detector_lambda.arn
-  handler          = "main"
-  source_code_hash = data.archive_file.detector_lambda_zip.output_base64sha256
-  runtime          = "provided.al2"
-  timeout          = 900 # 15 minutes for query execution
-  memory_size      = 512
-
-  environment {
-    variables = {
-      ALERTS_SNS_TOPIC_ARN  = aws_sns_topic.alerts.arn
-      ATHENA_DATABASE       = "amazon_security_lake_glue_db_${replace(var.aws_region, "-", "_")}"
-      ATHENA_RESULTS_BUCKET = aws_s3_bucket.athena_results.id
-      AWS_ACCOUNT_ID        = data.aws_caller_identity.current.account_id
-    }
-  }
-
-  depends_on = [
-    aws_iam_role_policy_attachment.detector_lambda_basic,
-    aws_iam_role_policy_attachment.detector_lambda_athena,
-    aws_iam_role_policy_attachment.detector_lambda_sns,
-  ]
-
-  tags = merge(local.common_tags, {
-    Name = "${var.basename}-detector"
-    Type = "lambda-function"
-  })
-}
-
-# EventBridge rule for periodic execution of detector Lambda
-resource "aws_cloudwatch_event_rule" "detector_schedule" {
-  name                = "${var.basename}-detector-schedule"
-  description         = "Trigger detector Lambda every hour"
-  schedule_expression = "rate(1 hour)"
-
-  tags = merge(local.common_tags, {
-    Name = "${var.basename}-detector-schedule"
-  })
-}
-
-# EventBridge target for detector Lambda
-resource "aws_cloudwatch_event_target" "detector_lambda" {
-  rule      = aws_cloudwatch_event_rule.detector_schedule.name
-  target_id = "DetectorLambdaTarget"
-  arn       = aws_lambda_function.detector.arn
-}
-
-# Permission for EventBridge to invoke detector Lambda
-resource "aws_lambda_permission" "allow_eventbridge" {
-  statement_id  = "AllowExecutionFromEventBridge"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.detector.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.detector_schedule.arn
-} 

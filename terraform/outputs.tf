@@ -18,4 +18,21 @@ output "raw_logs_bucket" {
 output "security_lake_bucket" {
   description = "Security Lake S3 bucket ARN"
   value       = aws_securitylake_data_lake.main.s3_bucket_arn
+}
+
+# Team-specific outputs
+output "teams" {
+  description = "Map of team resources"
+  value = {
+    for team_name, team_module in module.team : team_name => {
+      team_name                     = team_module.team_name
+      raw_logs_bucket_name          = team_module.raw_logs_bucket_name
+      raw_logs_bucket_arn           = team_module.raw_logs_bucket_arn
+      raw_logs_sns_topic_arn        = team_module.raw_logs_sns_topic_arn
+      raw_logs_sqs_queue_arn        = team_module.raw_logs_sqs_queue_arn
+      converter_lambda_function_arn = team_module.converter_lambda_function_arn
+      converter_iam_role_name       = team_module.converter_iam_role_name
+      custom_log_source_name        = team_module.custom_log_source_name
+    }
+  }
 } 

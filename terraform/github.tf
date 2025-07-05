@@ -21,7 +21,7 @@ resource "aws_iam_openid_connect_provider" "github" {
 
 # IAM Role for GitHub Actions
 resource "aws_iam_role" "github_actions" {
-  name = "${var.basename}-github-actions-role"
+  name = "GitHubActionsRole"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -37,7 +37,10 @@ resource "aws_iam_role" "github_actions" {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           }
           StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:m-mizutani/seccamp-2025-b1:*"
+            "token.actions.githubusercontent.com:sub" = [
+              "repo:m-mizutani/seccamp-2025-b1:*",
+              "repo:seccamp2025-b/b1-secmon:*"
+            ]
           }
         }
       }
@@ -45,7 +48,7 @@ resource "aws_iam_role" "github_actions" {
   })
 
   tags = merge(local.common_tags, {
-    Name = "${var.basename}-github-actions-role"
+    Name = "GitHubActionsRole"
     Type = "github-actions"
   })
 }
