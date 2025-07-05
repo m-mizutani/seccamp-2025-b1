@@ -50,9 +50,14 @@ resource "aws_kms_alias" "security_lake" {
   target_key_id = aws_kms_key.security_lake.key_id
 }
 
+# Data source for existing V2 role
+data "aws_iam_role" "security_lake_meta_store_v2" {
+  name = "AmazonSecurityLakeMetaStoreManagerV2"
+}
+
 # Security Lake Data Lake
 resource "aws_securitylake_data_lake" "main" {
-  meta_store_manager_role_arn = aws_iam_role.security_lake_meta_store.arn
+  meta_store_manager_role_arn = data.aws_iam_role.security_lake_meta_store_v2.arn
 
   configuration {
     region = var.aws_region
@@ -80,34 +85,8 @@ resource "aws_securitylake_data_lake" "main" {
   })
 }
 
-# IAM Role for Security Lake Meta Store Manager
-resource "aws_iam_role" "security_lake_meta_store" {
-  name = "${var.basename}-security-lake-meta-store-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "securitylake.amazonaws.com"
-        }
-      }
-    ]
-  })
-
-  tags = merge(local.common_tags, {
-    Name = "${var.basename}-security-lake-meta-store-role"
-    Type = "iam-role"
-  })
-}
-
-# Attach the Security Lake service role policy
-resource "aws_iam_role_policy_attachment" "security_lake_meta_store" {
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonSecurityLakeMetastoreManager"
-  role       = aws_iam_role.security_lake_meta_store.name
-}
+# Note: Using existing AWS-managed service role AmazonSecurityLakeMetaStoreManagerV2
+# This role is automatically created by AWS Security Lake when custom log sources are configured
 
 ###########################################
 # Custom Log Source (for application logs)
