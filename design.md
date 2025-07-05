@@ -39,8 +39,8 @@
   - Role名は `lambda-${TeamName}-importer-role` とする
     - `blue` の場合は `lambda-blue-importer-role` となる
   - このロールには以下の権限を付与する
-    - S3のデータ書き込み
-    - S3のデータList
+    - `${basename}-${team_name}-raw-logs` に対してS3のデータ書き込み
+    - `${basename}-${team_name}-raw-logs` に対してS3のデータList
     - Lambdaの基本権限
 - RawログデータがPutされるとSNSに通知が送信される
   - 通知先のSNSの名前は `${basename}-${team_name}-raw-logs-sns` とする
@@ -63,8 +63,7 @@
     - `blue` の場合は `lambda-blue-detector-role` となる
   - このRoleは他にも以下の権限を付与する
     - Athena のクエリ実行
-    - SNS の通知
-    - S3 のデータ取得
+    - `${basename}-alerts-sns` に対してSNSの通知
     - Lambdaの基本権限
 - アラート通知用SNSを作成する。名前は `${basename}-alerts-sns` とする
 - IAM Identity Provider を作成する
