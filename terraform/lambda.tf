@@ -112,12 +112,12 @@ resource "aws_iam_role_policy_attachment" "converter_lambda_s3" {
 resource "aws_lambda_function" "converter" {
   filename         = data.archive_file.converter_lambda_zip.output_path
   function_name    = "${var.basename}-converter"
-  role            = aws_iam_role.converter_lambda.arn
-  handler         = "main"
+  role             = aws_iam_role.converter_lambda.arn
+  handler          = "main"
   source_code_hash = data.archive_file.converter_lambda_zip.output_base64sha256
-  runtime         = "provided.al2"
-  timeout         = 300
-  memory_size     = 512
+  runtime          = "provided.al2"
+  timeout          = 300
+  memory_size      = 512
 
   environment {
     variables = {
@@ -284,19 +284,19 @@ resource "aws_s3_bucket_public_access_block" "athena_results" {
 resource "aws_lambda_function" "detector" {
   filename         = data.archive_file.detector_lambda_zip.output_path
   function_name    = "${var.basename}-detector"
-  role            = aws_iam_role.detector_lambda.arn
-  handler         = "main"
+  role             = aws_iam_role.detector_lambda.arn
+  handler          = "main"
   source_code_hash = data.archive_file.detector_lambda_zip.output_base64sha256
-  runtime         = "provided.al2"
-  timeout         = 900  # 15 minutes for query execution
-  memory_size     = 512
+  runtime          = "provided.al2"
+  timeout          = 900 # 15 minutes for query execution
+  memory_size      = 512
 
   environment {
     variables = {
-      ALERTS_SNS_TOPIC_ARN = aws_sns_topic.alerts.arn
-      ATHENA_DATABASE      = aws_glue_catalog_database.security_lake.name
+      ALERTS_SNS_TOPIC_ARN  = aws_sns_topic.alerts.arn
+      ATHENA_DATABASE       = "amazon_security_lake_glue_db_${replace(var.aws_region, "-", "_")}"
       ATHENA_RESULTS_BUCKET = aws_s3_bucket.athena_results.id
-      AWS_ACCOUNT_ID       = data.aws_caller_identity.current.account_id
+      AWS_ACCOUNT_ID        = data.aws_caller_identity.current.account_id
     }
   }
 

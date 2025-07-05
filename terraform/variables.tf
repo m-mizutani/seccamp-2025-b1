@@ -9,3 +9,9 @@ variable "aws_region" {
   type        = string
   default     = "ap-northeast-1"
 }
+
+variable "enable_external_subscriber" {
+  description = "Enable external subscriber for Security Lake"
+  type        = bool
+  default     = false
+}

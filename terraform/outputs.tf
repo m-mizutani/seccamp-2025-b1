@@ -5,12 +5,17 @@ output "aws_region" {
   value       = var.aws_region
 }
 
-output "environment" {
-  description = "The environment name"
-  value       = var.environment
+output "basename" {
+  description = "The base name for resources"
+  value       = var.basename
 }
 
-output "project_name" {
-  description = "The project name"
-  value       = var.project_name
+output "raw_logs_bucket" {
+  description = "Name of the raw logs S3 bucket"
+  value       = aws_s3_bucket.raw_logs.bucket
+}
+
+output "security_lake_bucket" {
+  description = "Security Lake S3 bucket ARN"
+  value       = aws_securitylake_data_lake.main.s3_bucket_arn
 } 
