@@ -78,7 +78,7 @@
 ## 制約事項
 
 - 変数
-  - basenameは seccamp2025-b1-poc とする。これは variables.tf に定義され、変更可能にする
+  - basenameは seccamp2025-b1 とする。これは variables.tf に定義され、変更可能にする
   - regionは ap-northeast-1 とする。これは variables.tf に定義され、変更可能にする
 - terraformのコードは /terraform ディレクトリ以下に配置する
 - lambda はそれぞれ /terraform/lambda/ ディレクトリ以下に配置する
