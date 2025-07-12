@@ -1,7 +1,7 @@
 variable "basename" {
   description = "Base name for all resources"
   type        = string
-  default     = "seccamp2025-b1-poc"
+  default     = "seccamp2025-b1"
 }
 
 variable "aws_region" {
