@@ -92,14 +92,14 @@ func generateUsers() []User {
 	return users
 }
 
-// リソースリストを生成（約200個）
+// リソースリストを生成（約500個）
 func generateResources() []Resource {
 	resources := []Resource{}
 	idCounter := 1000
 
-	// 教材カテゴリ（40個）
-	subjects := []string{"数学", "英語", "国語", "理科", "社会", "体育", "音楽", "美術", "技術", "家庭科"}
-	materials := []string{"教科書", "問題集", "解答集", "指導要領"}
+	// 教材カテゴリ（120個）
+	subjects := []string{"数学", "英語", "国語", "理科", "社会", "体育", "音楽", "美術", "技術", "家庭科", "情報", "商業"}
+	materials := []string{"教科書", "問題集", "解答集", "指導要領", "副教材", "参考書", "ワークブック", "プリント", "動画教材", "テスト問題"}
 
 	for _, subject := range subjects {
 		for _, material := range materials {
@@ -113,9 +113,9 @@ func generateResources() []Resource {
 		}
 	}
 
-	// 成績・評価データ（30個）
-	gradeTypes := []string{"中間テスト", "期末テスト", "小テスト", "宿題", "レポート", "出席"}
-	for _, subject := range subjects[:5] { // 主要5科目
+	// 成績・評価データ（84個）
+	gradeTypes := []string{"中間テスト", "期末テスト", "小テスト", "宿題", "レポート", "出席", "実技評価"}
+	for _, subject := range subjects { // 全12科目
 		for _, gradeType := range gradeTypes {
 			resources = append(resources, Resource{
 				Name:       fmt.Sprintf("成績/%s/%s結果.xlsx", subject, gradeType),
@@ -127,9 +127,9 @@ func generateResources() []Resource {
 		}
 	}
 
-	// 学習データ・AI関連（20個）
-	aiDataTypes := []string{"学習進捗", "学習パターン", "理解度分析", "推奨コンテンツ"}
-	for _, subject := range subjects[:5] {
+	// 学習データ・AI関連（60個）
+	aiDataTypes := []string{"学習進捗", "学習パターン", "理解度分析", "推奨コンテンツ", "学習履歴"}
+	for _, subject := range subjects { // 全12科目
 		for _, dataType := range aiDataTypes {
 			resources = append(resources, Resource{
 				Name:       fmt.Sprintf("学習データ/%s/%s.json", subject, dataType),
@@ -141,13 +141,15 @@ func generateResources() []Resource {
 		}
 	}
 
-	// 管理用ファイル（25個）
+	// 管理用ファイル（70個）
 	adminCategories := []map[string][]string{
-		{"財務": {"予算計画", "決算書", "監査報告", "経費明細", "給与データ"}},
-		{"人事": {"職員名簿", "勤怠記録", "評価表", "研修記録", "契約書"}},
-		{"学籍": {"入学者名簿", "卒業者名簿", "転校記録", "出席統計", "進路データ"}},
-		{"施設": {"設備点検", "修繕記録", "安全点検", "清掃記録", "備品管理"}},
-		{"システム": {"ユーザー権限", "バックアップ", "ログ設定", "監査設定", "セキュリティ設定"}},
+		{"財務": {"予算計画", "決算書", "監査報告", "経費明細", "給与データ", "税務申告", "補助金申請", "寄付管理", "支払明細", "収支報告"}},
+		{"人事": {"職員名簿", "勤怠記録", "評価表", "研修記録", "契約書", "採用資料", "昇進記録", "退職手続", "健康診断", "労働契約"}},
+		{"学籍": {"入学者名簿", "卒業者名簿", "転校記録", "出席統計", "進路データ", "奨学金", "保護者連絡", "学籍変更", "休学届", "成績証明"}},
+		{"施設": {"設備点検", "修繕記録", "安全点検", "清掃記録", "備品管理", "工事記録", "保険関連", "法定点検", "環境測定", "防災計画"}},
+		{"システム": {"ユーザー権限", "バックアップ", "ログ設定", "監査設定", "セキュリティ設定", "ライセンス", "障害記録", "更新履歴", "アクセス制御", "運用手順"}},
+		{"教務": {"カリキュラム", "時間割", "教材管理", "試験管理", "行事計画", "授業記録", "評価基準", "進級判定", "補習計画", "教育実習"}},
+		{"総務": {"会議録", "規程集", "通達文書", "外部連絡", "統計資料", "年報", "理事会資料", "認可申請", "法人登記", "印鑑管理"}},
 	}
 
 	for _, categoryMap := range adminCategories {
@@ -164,10 +166,21 @@ func generateResources() []Resource {
 		}
 	}
 
-	// 個人フォルダ（50個）
-	for i := 1; i <= 50; i++ {
+	// 個人フォルダ（90個）
+	for i := 1; i <= 90; i++ {
+		var prefix string
+		switch {
+		case i <= 50:
+			prefix = "teacher"
+		case i <= 70:
+			prefix = "staff"
+		case i <= 80:
+			prefix = "student"
+		default:
+			prefix = "external"
+		}
 		resources = append(resources, Resource{
-			Name:       fmt.Sprintf("個人/teacher%02d/", i),
+			Name:       fmt.Sprintf("個人/%s%02d/", prefix, i),
 			Type:       "folder",
 			ID:         fmt.Sprintf("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE%04d", idCounter),
 			Visibility: "private",
@@ -175,25 +188,49 @@ func generateResources() []Resource {
 		idCounter++
 	}
 
-	// 共有フォルダ・公開ファイル（35個）
-	sharedItems := []map[string]string{
-		{"共有/お知らせ/": "folder"},
-		{"共有/行事予定/": "folder"},
-		{"共有/委員会資料/": "folder"},
-		{"共有/PTA資料/": "folder"},
-		{"共有/研修資料/": "folder"},
-		{"公開/学校案内.pdf": "document"},
-		{"公開/入学要項.pdf": "document"},
-		{"公開/年間行事.pdf": "document"},
-		{"公開/学校沿革.pdf": "document"},
-		{"公開/アクセス.pdf": "document"},
+	// 共有フォルダ・公開ファイル（80個）
+	sharedFolders := []string{
+		"共有/お知らせ/", "共有/行事予定/", "共有/委員会資料/", "共有/PTA資料/", "共有/研修資料/",
+		"共有/職員会議/", "共有/教科会議/", "共有/学年会議/", "共有/安全管理/", "共有/健康管理/",
+		"共有/図書室/", "共有/保健室/", "共有/相談室/", "共有/実験室/", "共有/体育館/",
+		"共有/音楽室/", "共有/美術室/", "共有/技術室/", "共有/家庭科室/", "共有/コンピュータ室/",
+	}
+	
+	publicFiles := []string{
+		"公開/学校案内.pdf", "公開/入学要項.pdf", "公開/年間行事.pdf", "公開/学校沿革.pdf", "公開/アクセス.pdf",
+		"公開/教育方針.pdf", "公開/進路実績.pdf", "公開/部活動紹介.pdf", "公開/制服案内.pdf", "公開/学費案内.pdf",
+		"公開/入試要項.pdf", "公開/説明会案内.pdf", "公開/奨学金案内.pdf", "公開/施設紹介.pdf", "公開/教員紹介.pdf",
+		"公開/保護者の声.pdf", "公開/卒業生の声.pdf", "公開/Q&A.pdf", "公開/お問い合わせ.pdf", "公開/交通案内.pdf",
+	}
+	
+	internalDocs := []string{
+		"内部/規程集.pdf", "内部/職員ハンドブック.pdf", "内部/緊急時対応.pdf", "内部/個人情報保護.pdf", "内部/セキュリティ規程.pdf",
+		"内部/服務規程.pdf", "内部/評価基準.pdf", "内部/授業指導要領.pdf", "内部/生活指導要領.pdf", "内部/進路指導要領.pdf",
+		"内部/保護者対応.pdf", "内部/事故対応.pdf", "内部/災害対応.pdf", "内部/感染症対応.pdf", "内部/いじめ対応.pdf",
+		"内部/特別支援.pdf", "内部/国際交流.pdf", "内部/地域連携.pdf", "内部/広報活動.pdf", "内部/募集活動.pdf",
+	}
+	
+	// 全てを統合
+	var sharedItems []map[string]string
+	for _, folder := range sharedFolders {
+		sharedItems = append(sharedItems, map[string]string{folder: "folder"})
+	}
+	for _, file := range publicFiles {
+		sharedItems = append(sharedItems, map[string]string{file: "document"})
+	}
+	for _, file := range internalDocs {
+		sharedItems = append(sharedItems, map[string]string{file: "document"})
 	}
 
 	for _, itemMap := range sharedItems {
 		for name, resourceType := range itemMap {
-			visibility := "domain"
+			var visibility string
 			if strings.HasPrefix(name, "公開") {
 				visibility = "public_on_the_web"
+			} else if strings.HasPrefix(name, "内部") {
+				visibility = "private"
+			} else {
+				visibility = "domain"
 			}
 
 			resources = append(resources, Resource{
@@ -206,12 +243,21 @@ func generateResources() []Resource {
 		}
 	}
 
-	// 残りを埋めるためのバリエーション追加
-	for len(resources) < 200 {
-		category := []string{"その他", "アーカイブ", "テンプレート", "サンプル"}[len(resources)%4]
+	// 残りを埋めるためのバリエーション追加（500個まで）
+	categories := []string{"アーカイブ", "テンプレート", "サンプル", "ドラフト", "バックアップ", "ログ", "統計", "レポート"}
+	fileTypes := []string{"pdf", "xlsx", "docx", "pptx", "json", "csv"}
+	
+	for len(resources) < 500 {
+		category := categories[len(resources)%len(categories)]
+		fileType := fileTypes[len(resources)%len(fileTypes)]
+		docType := "document"
+		if fileType == "xlsx" || fileType == "csv" {
+			docType = "spreadsheet"
+		}
+		
 		resources = append(resources, Resource{
-			Name:       fmt.Sprintf("%s/ファイル%03d.pdf", category, len(resources)),
-			Type:       "document",
+			Name:       fmt.Sprintf("%s/ファイル%03d.%s", category, len(resources), fileType),
+			Type:       docType,
 			ID:         fmt.Sprintf("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE%04d", idCounter),
 			Visibility: "private",
 		})
