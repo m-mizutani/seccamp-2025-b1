@@ -167,6 +167,110 @@ resource "aws_lambda_event_source_mapping" "converter_sqs" {
 
 
 
+###########################################
+# AuditLog Lambda (Global shared Lambda)
+###########################################
+
+# Build auditlog Lambda binary
+resource "null_resource" "build_auditlog" {
+  triggers = {
+    source_hash = data.archive_file.auditlog_source.output_base64sha256
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      cd ${path.module}/lambda/auditlog
+      GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap main.go
+    EOT
+    environment = {
+      PAGER = ""
+    }
+  }
+}
+
+# Archive source files for trigger detection
+data "archive_file" "auditlog_source" {
+  type        = "zip"
+  source_dir  = "${path.module}/lambda/auditlog"
+  output_path = "${path.module}/lambda/auditlog_source.zip"
+  excludes    = ["*.zip", "go.sum", "bootstrap", "*_test.go", "testdata"]
+}
+
+# Archive file for auditlog Lambda
+data "archive_file" "auditlog_lambda_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/lambda/auditlog"
+  output_path = "${path.module}/lambda/auditlog.zip"
+  excludes    = ["*.zip", "go.sum", "*_test.go", "testdata", "go.mod"]
+
+  depends_on = [null_resource.build_auditlog]
+}
+
+# IAM Role for AuditLog Lambda
+resource "aws_iam_role" "auditlog_lambda" {
+  name = "${var.basename}-auditlog-lambda-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "${var.basename}-auditlog-lambda-role"
+    Type = "lambda-role"
+  })
+}
+
+# Basic Lambda execution role
+resource "aws_iam_role_policy_attachment" "auditlog_lambda_basic" {
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  role       = aws_iam_role.auditlog_lambda.name
+}
+
+# AuditLog Lambda function
+resource "aws_lambda_function" "auditlog" {
+  filename         = data.archive_file.auditlog_lambda_zip.output_path
+  function_name    = "${var.basename}-auditlog"
+  role             = aws_iam_role.auditlog_lambda.arn
+  handler          = "bootstrap"
+  source_code_hash = data.archive_file.auditlog_lambda_zip.output_base64sha256
+  runtime          = "provided.al2"
+  architectures    = ["arm64"]
+  timeout          = 30
+  memory_size      = 256
+
+  depends_on = [
+    aws_iam_role_policy_attachment.auditlog_lambda_basic,
+  ]
+
+  tags = merge(local.common_tags, {
+    Name = "${var.basename}-auditlog"
+    Type = "lambda-function"
+  })
+}
+
+# Lambda Function URL for public access
+resource "aws_lambda_function_url" "auditlog" {
+  function_name      = aws_lambda_function.auditlog.function_name
+  authorization_type = "NONE"
+
+  cors {
+    allow_credentials = false
+    allow_methods     = ["GET"]
+    allow_origins     = ["*"]
+    allow_headers     = ["*"]
+    max_age          = 86400
+  }
+}
+
 # S3 bucket for Athena query results
 resource "aws_s3_bucket" "athena_results" {
   bucket = "${var.basename}-athena-results"

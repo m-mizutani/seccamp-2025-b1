@@ -20,6 +20,11 @@ output "security_lake_bucket" {
   value       = aws_securitylake_data_lake.main.s3_bucket_arn
 }
 
+output "auditlog_lambda_url" {
+  description = "URL for the AuditLog Lambda Function"
+  value       = aws_lambda_function_url.auditlog.function_url
+}
+
 # Team-specific outputs
 output "teams" {
   description = "Map of team resources"
