@@ -1,0 +1,8 @@
+---
+alwaysApply: true
+---
+
+# Restrction
+
+- コマンドを実行する際に必ず環境変数で `PAGER=""` を設定する
+- AWSのリソースの書き込みは必ず `terraform apply` 経由で実行する。やむを得ず `aws` コマンドを使用する場合はユーザに確認を求める

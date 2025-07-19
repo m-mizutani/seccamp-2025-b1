@@ -1,0 +1,14 @@
+.terraform
+*.zip
+scenario.md
+.backlog
+setup.md
+
+tools/loggen/loggen
+tools/loggen/output/
+
+# Lambda build artifacts
+terraform/lambda/auditlog/bootstrap
+terraform/lambda/auditlog_source.zip
+terraform/lambda/auditlog.zip
+

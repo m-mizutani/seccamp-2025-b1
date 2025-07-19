@@ -1,0 +1,4 @@
+{"id":"log001","timestamp":"2023-12-01T10:00:00Z","user":"alice","action":"login","target":"","success":true,"remote":"192.168.1.100"}
+{"id":"log002","timestamp":"2023-12-01T10:05:00Z","user":"bob","action":"read","target":"document1.txt","success":true,"remote":"192.168.1.101"}
+{"id":"log003","timestamp":"2023-12-01T10:10:00Z","user":"charlie","action":"write","target":"document2.txt","success":false,"remote":"192.168.1.102"}
+{"id":"log004","timestamp":"2023-12-01T10:15:00Z","user":"alice","action":"login","target":"","success":false,"remote":"10.0.0.1"} 
