@@ -5,7 +5,7 @@
 以下のソフトウェアをご自身のラップトップPCで使えるように準備してください。
 
 - Go
-  - version 1.24 以上
+  - version 1.22 以上
   - インストール: https://golang.org/doc/install
 - git
   - OS標準のものが入っていれば設定不要
@@ -33,9 +33,22 @@
 
 - Tour of Go https://go.dev/tour を一通りやっておく
 - 基本的には以下のような処理が自分で書けるようになっていると良いです
-  - HTTPリクエストの送信と結果の受信処理
-  - 構造体 ⇔ JSONデータの変換
-  - AWS SDKの呼び出し（主にS3、SNSを利用）
+  - 複数の構造体を別の構造体に変換する
+  - 構造体 ↔ json の変換ができる
+  - 基本的な制御構文
+
+### SQL基礎
+
+実習でAthena（Presto/Trinoベース）を使ったログ分析を行います。以下のようなSQL構文を理解しているとスムーズに進められます。
+
+- SELECT, WHERE, GROUP BY, ORDER BY
+- COUNT, SUMなどの集約関数
+- JOINの基本概念
+- 時刻関数の基本（`date_format`, `from_unixtime`など）
+
+Web上の無料資料としては（英語ですが）以下のようなところを参照してみてください。
+- [SQLボルト](https://sqlbolt.com/) - インタラクティブなSQL学習サイト
+- [W3Schools SQL Tutorial](https://www.w3schools.com/sql/) - 基本的なSQL構文の解説
 
 ### セキュリティ監視基礎
 
