@@ -14,14 +14,14 @@ import (
 func loadDayTemplate(filePath string) (*logcore.DayTemplate, error) {
 	// ファイル拡張子で形式を判定
 	ext := strings.ToLower(filepath.Ext(filePath))
-	
+
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
-	
+
 	var dayTemplate logcore.DayTemplate
-	
+
 	switch ext {
 	case ".json":
 		if err := json.Unmarshal(data, &dayTemplate); err != nil {
@@ -41,7 +41,7 @@ func loadDayTemplate(filePath string) (*logcore.DayTemplate, error) {
 			return nil, fmt.Errorf("failed to load file (unknown format): %w", err)
 		}
 	}
-	
+
 	return &dayTemplate, nil
 }
 
@@ -51,17 +51,17 @@ func tryLoadAnyFormat(dayTemplate *logcore.DayTemplate, data []byte) error {
 	if err := json.Unmarshal(data, dayTemplate); err == nil {
 		return nil
 	}
-	
+
 	// 2. バイナリ形式を試行
 	if err := dayTemplate.UnmarshalBinary(data); err == nil {
 		return nil
 	}
-	
+
 	// 3. 圧縮バイナリ形式を試行
 	if err := dayTemplate.UnmarshalBinaryCompressed(data); err == nil {
 		return nil
 	}
-	
+
 	return fmt.Errorf("unsupported file format")
 }
 

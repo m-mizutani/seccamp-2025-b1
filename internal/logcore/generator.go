@@ -24,14 +24,14 @@ func NewGenerator(config *Config) *Generator {
 func (g *Generator) GenerateLogEntry(seed LogSeed, baseDate time.Time, sequenceInSecond int) *GoogleWorkspaceLogEntry {
 	// 1. タイムスタンプ計算
 	timestamp := baseDate.Add(time.Duration(seed.Timestamp) * time.Second)
-	
+
 	// 2. シードベースの疑似乱数生成器
 	rng := rand.New(rand.NewSource(int64(seed.Seed) + int64(sequenceInSecond)))
-	
+
 	// 3. ユーザー・リソース解決
 	user := g.config.Users[seed.UserIndex%uint8(len(g.config.Users))]
 	resource := g.config.Resources[seed.ResourceIdx%uint8(len(g.config.Resources))]
-	
+
 	// 4. 基本ログエントリ作成
 	logEntry := &GoogleWorkspaceLogEntry{
 		Kind: "audit#activity",
@@ -50,7 +50,7 @@ func (g *Generator) GenerateLogEntry(seed LogSeed, baseDate time.Time, sequenceI
 		IPAddress:   g.generateIPAddress(user, rng),
 		Events:      []Event{},
 	}
-	
+
 	// 5. イベント種別による生成分岐
 	switch seed.EventType {
 	case EventTypeDriveAccess:
@@ -64,12 +64,12 @@ func (g *Generator) GenerateLogEntry(seed LogSeed, baseDate time.Time, sequenceI
 	default:
 		logEntry.Events = append(logEntry.Events, g.generateDriveAccessEvent(user, resource, rng))
 	}
-	
+
 	// 6. 異常パターンの適用
 	if seed.Pattern > 0 {
 		return g.anomalyGenerator.ApplyAnomalyPattern(logEntry, seed.Pattern, rng)
 	}
-	
+
 	return logEntry
 }
 
@@ -177,17 +177,17 @@ func (g *Generator) generateRandomString(rng *rand.Rand, length int) string {
 func ExtractSeedsInRange(template *DayTemplate, startTime, endTime time.Time) []LogSeed {
 	// 日付の開始時刻を取得
 	dayStart := time.Date(startTime.Year(), startTime.Month(), startTime.Day(), 0, 0, 0, 0, startTime.Location())
-	
+
 	// 秒単位での開始・終了位置計算
 	startSecond := int64(startTime.Sub(dayStart).Seconds())
 	endSecond := int64(endTime.Sub(dayStart).Seconds())
-	
+
 	var seeds []LogSeed
 	for _, seed := range template.LogSeeds {
 		if seed.Timestamp >= startSecond && seed.Timestamp < endSecond {
 			seeds = append(seeds, seed)
 		}
 	}
-	
+
 	return seeds
 }

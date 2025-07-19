@@ -195,21 +195,21 @@ func generateResources() []Resource {
 		"共有/図書室/", "共有/保健室/", "共有/相談室/", "共有/実験室/", "共有/体育館/",
 		"共有/音楽室/", "共有/美術室/", "共有/技術室/", "共有/家庭科室/", "共有/コンピュータ室/",
 	}
-	
+
 	publicFiles := []string{
 		"公開/学校案内.pdf", "公開/入学要項.pdf", "公開/年間行事.pdf", "公開/学校沿革.pdf", "公開/アクセス.pdf",
 		"公開/教育方針.pdf", "公開/進路実績.pdf", "公開/部活動紹介.pdf", "公開/制服案内.pdf", "公開/学費案内.pdf",
 		"公開/入試要項.pdf", "公開/説明会案内.pdf", "公開/奨学金案内.pdf", "公開/施設紹介.pdf", "公開/教員紹介.pdf",
 		"公開/保護者の声.pdf", "公開/卒業生の声.pdf", "公開/Q&A.pdf", "公開/お問い合わせ.pdf", "公開/交通案内.pdf",
 	}
-	
+
 	internalDocs := []string{
 		"内部/規程集.pdf", "内部/職員ハンドブック.pdf", "内部/緊急時対応.pdf", "内部/個人情報保護.pdf", "内部/セキュリティ規程.pdf",
 		"内部/服務規程.pdf", "内部/評価基準.pdf", "内部/授業指導要領.pdf", "内部/生活指導要領.pdf", "内部/進路指導要領.pdf",
 		"内部/保護者対応.pdf", "内部/事故対応.pdf", "内部/災害対応.pdf", "内部/感染症対応.pdf", "内部/いじめ対応.pdf",
 		"内部/特別支援.pdf", "内部/国際交流.pdf", "内部/地域連携.pdf", "内部/広報活動.pdf", "内部/募集活動.pdf",
 	}
-	
+
 	// 全てを統合
 	var sharedItems []map[string]string
 	for _, folder := range sharedFolders {
@@ -246,7 +246,7 @@ func generateResources() []Resource {
 	// 残りを埋めるためのバリエーション追加（500個まで）
 	categories := []string{"アーカイブ", "テンプレート", "サンプル", "ドラフト", "バックアップ", "ログ", "統計", "レポート"}
 	fileTypes := []string{"pdf", "xlsx", "docx", "pptx", "json", "csv"}
-	
+
 	for len(resources) < 500 {
 		category := categories[len(resources)%len(categories)]
 		fileType := fileTypes[len(resources)%len(fileTypes)]
@@ -254,7 +254,7 @@ func generateResources() []Resource {
 		if fileType == "xlsx" || fileType == "csv" {
 			docType = "spreadsheet"
 		}
-		
+
 		resources = append(resources, Resource{
 			Name:       fmt.Sprintf("%s/ファイル%03d.%s", category, len(resources), fileType),
 			Type:       docType,

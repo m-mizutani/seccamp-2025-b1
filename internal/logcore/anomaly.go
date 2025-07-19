@@ -40,7 +40,7 @@ func generateExample1NightAdminDownload(base *GoogleWorkspaceLogEntry, rng *rand
 	if strings.Contains(base.Actor.Email, "admin") || strings.Contains(base.Actor.Email, "manager") {
 		timestamp, _ := time.Parse(time.RFC3339Nano, base.ID.Time)
 		hour := timestamp.Hour()
-		
+
 		// 業務時間外（18:00-9:00）での異常動作
 		if hour >= 18 || hour <= 9 {
 			base.ID.ApplicationName = "drive"
@@ -59,7 +59,7 @@ func generateExample1NightAdminDownload(base *GoogleWorkspaceLogEntry, rng *rand
 					},
 				},
 			}
-			
+
 			// 内部IPアドレス
 			base.IPAddress = generateInternalIP(rng)
 		}
@@ -73,7 +73,7 @@ func generateExample2ExternalLinkAccess(base *GoogleWorkspaceLogEntry, rng *rand
 	base.IPAddress = generateExternalIP(rng)
 	base.Actor.Email = "unknown@external-domain.com"
 	base.Actor.ProfileID = generateExternalProfileID(rng)
-	
+
 	// 機密フォルダへのアクセス
 	confidentialFiles := []string{
 		"学籍管理データベース.xlsx",
@@ -82,7 +82,7 @@ func generateExample2ExternalLinkAccess(base *GoogleWorkspaceLogEntry, rng *rand
 		"試験問題集.docx",
 	}
 	selectedFile := confidentialFiles[rng.Intn(len(confidentialFiles))]
-	
+
 	base.ID.ApplicationName = "drive"
 	base.Events = []Event{
 		{
@@ -98,7 +98,7 @@ func generateExample2ExternalLinkAccess(base *GoogleWorkspaceLogEntry, rng *rand
 			},
 		},
 	}
-	
+
 	return base
 }
 
@@ -106,11 +106,11 @@ func generateExample2ExternalLinkAccess(base *GoogleWorkspaceLogEntry, rng *rand
 func generateExample3VpnLateralMovement(base *GoogleWorkspaceLogEntry, rng *rand.Rand) *GoogleWorkspaceLogEntry {
 	timestamp, _ := time.Parse(time.RFC3339Nano, base.ID.Time)
 	hour := timestamp.Hour()
-	
+
 	// 業務時間内だが怪しいアクセスパターン
 	if hour >= 9 && hour <= 18 {
 		base.Actor.Email = "compromised.user@muhai-academy.com"
-		
+
 		// Google Workspace内のファイル・フォルダへの連続アクセス拒否
 		workspaceTargets := []string{
 			"財務データ/予算計画.xlsx",
@@ -119,7 +119,7 @@ func generateExample3VpnLateralMovement(base *GoogleWorkspaceLogEntry, rng *rand
 			"システム/バックアップ.zip",
 		}
 		selectedTarget := workspaceTargets[rng.Intn(len(workspaceTargets))]
-		
+
 		base.ID.ApplicationName = "drive"
 		base.Events = []Event{
 			{
@@ -136,11 +136,11 @@ func generateExample3VpnLateralMovement(base *GoogleWorkspaceLogEntry, rng *rand
 				},
 			},
 		}
-		
+
 		// VPN経由の内部IPからのアクセス
 		base.IPAddress = generateVPNInternalIP(rng)
 	}
-	
+
 	return base
 }
 
@@ -148,13 +148,13 @@ func generateExample3VpnLateralMovement(base *GoogleWorkspaceLogEntry, rng *rand
 func generateTimeAnomaly(base *GoogleWorkspaceLogEntry, rng *rand.Rand) *GoogleWorkspaceLogEntry {
 	timestamp, _ := time.Parse(time.RFC3339Nano, base.ID.Time)
 	hour := timestamp.Hour()
-	
+
 	// 深夜帯のアクセス
 	if hour >= 0 && hour <= 6 {
 		base.Events[0].Name = "suspicious_access"
 		base.IPAddress = generateSuspiciousIP(rng)
 	}
-	
+
 	return base
 }
 
@@ -169,7 +169,7 @@ func generateVolumeAnomaly(base *GoogleWorkspaceLogEntry, rng *rand.Rand) *Googl
 			}
 		}
 	}
-	
+
 	return base
 }
 

@@ -27,36 +27,36 @@ func StatsCommand() *cli.Command {
 
 func statsAction(c *cli.Command) error {
 	seedsPath := c.String("seeds")
-	
+
 	// シードファイル読み込み（自動判定）
 	dayTemplate, err := loadDayTemplate(seedsPath)
 	if err != nil {
 		return fmt.Errorf("failed to load seeds file: %w", err)
 	}
-	
+
 	// 統計情報計算
 	stats := calculateStats(dayTemplate.LogSeeds)
-	
+
 	// 結果出力
 	fmt.Printf("📊 Log Seeds Statistics\n")
 	fmt.Printf("======================\n\n")
-	
+
 	fmt.Printf("📅 Date: %s\n", dayTemplate.Date)
 	fmt.Printf("📈 Total Seeds: %d\n", stats.TotalSeeds)
 	fmt.Printf("⏰ Generated: %s\n", dayTemplate.Metadata.Generated.Format("2006-01-02 15:04:05"))
 	fmt.Printf("\n")
-	
+
 	fmt.Printf("🎯 Event Type Distribution:\n")
 	for eventType, count := range stats.EventTypes {
 		ratio := float64(count) / float64(stats.TotalSeeds) * 100
 		fmt.Printf("  - Type %d: %d logs (%.1f%%)\n", eventType, count, ratio)
 	}
 	fmt.Printf("\n")
-	
+
 	fmt.Printf("⚠️ Anomaly Pattern Distribution:\n")
 	normalCount := stats.Patterns[0]
 	fmt.Printf("  - Normal: %d logs (%.1f%%)\n", normalCount, float64(normalCount)/float64(stats.TotalSeeds)*100)
-	
+
 	for pattern := uint8(1); pattern <= 10; pattern++ {
 		if count, exists := stats.Patterns[pattern]; exists && count > 0 {
 			ratio := float64(count) / float64(stats.TotalSeeds) * 100
@@ -65,21 +65,21 @@ func statsAction(c *cli.Command) error {
 		}
 	}
 	fmt.Printf("\n")
-	
+
 	fmt.Printf("👥 User Distribution:\n")
 	for userIdx, count := range stats.Users {
 		ratio := float64(count) / float64(stats.TotalSeeds) * 100
 		fmt.Printf("  - User %d: %d logs (%.1f%%)\n", userIdx, count, ratio)
 	}
 	fmt.Printf("\n")
-	
+
 	fmt.Printf("📂 Resource Distribution:\n")
 	for resourceIdx, count := range stats.Resources {
 		ratio := float64(count) / float64(stats.TotalSeeds) * 100
 		fmt.Printf("  - Resource %d: %d logs (%.1f%%)\n", resourceIdx, count, ratio)
 	}
 	fmt.Printf("\n")
-	
+
 	fmt.Printf("⏱️ Hourly Distribution:\n")
 	for hour, count := range stats.HourlyDistribution {
 		if count > 0 {
@@ -88,17 +88,17 @@ func statsAction(c *cli.Command) error {
 			fmt.Printf("  - %02d:00: %6d logs (%.1f%%) %s\n", hour, count, ratio, bar)
 		}
 	}
-	
+
 	return nil
 }
 
 type SeedStats struct {
-	TotalSeeds          int
-	EventTypes          map[uint8]int
-	Patterns            map[uint8]int
-	Users               map[uint8]int
-	Resources           map[uint8]int
-	HourlyDistribution  map[int]int
+	TotalSeeds         int
+	EventTypes         map[uint8]int
+	Patterns           map[uint8]int
+	Users              map[uint8]int
+	Resources          map[uint8]int
+	HourlyDistribution map[int]int
 }
 
 func calculateStats(seeds []logcore.LogSeed) SeedStats {
@@ -110,18 +110,18 @@ func calculateStats(seeds []logcore.LogSeed) SeedStats {
 		Resources:          make(map[uint8]int),
 		HourlyDistribution: make(map[int]int),
 	}
-	
+
 	for _, seed := range seeds {
 		stats.EventTypes[seed.EventType]++
 		stats.Patterns[seed.Pattern]++
 		stats.Users[seed.UserIndex]++
 		stats.Resources[seed.ResourceIdx]++
-		
+
 		// 時間別分布
 		hour := int(seed.Timestamp / 3600)
 		stats.HourlyDistribution[hour]++
 	}
-	
+
 	return stats
 }
 
@@ -150,7 +150,7 @@ func generateBar(ratio float64, maxWidth int) string {
 	if width > maxWidth {
 		width = maxWidth
 	}
-	
+
 	bar := ""
 	for i := 0; i < width; i++ {
 		bar += "█"
@@ -158,6 +158,6 @@ func generateBar(ratio float64, maxWidth int) string {
 	for i := width; i < maxWidth/4; i++ {
 		bar += "░"
 	}
-	
+
 	return bar
 }

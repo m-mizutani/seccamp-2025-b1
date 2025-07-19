@@ -33,38 +33,38 @@ func ValidateCommand() *cli.Command {
 func validateAction(c *cli.Command) error {
 	seedsPath := c.String("seeds")
 	verbose := c.Bool("verbose")
-	
+
 	// シードファイル読み込み（自動判定）
 	dayTemplate, err := loadDayTemplate(seedsPath)
 	if err != nil {
 		return fmt.Errorf("failed to load seeds file: %w", err)
 	}
-	
+
 	fmt.Printf("Validating seeds file: %s\n", seedsPath)
 	fmt.Printf("Date: %s\n", dayTemplate.Date)
 	fmt.Printf("Total seeds: %d\n", len(dayTemplate.LogSeeds))
-	
+
 	// バリデーション実行
 	errors := []string{}
-	
+
 	// 1. 基本構造チェック
 	if dayTemplate.Date == "" {
 		errors = append(errors, "missing date field")
 	}
-	
+
 	if len(dayTemplate.LogSeeds) == 0 {
 		errors = append(errors, "no log seeds found")
 	}
-	
+
 	// 2. 日付形式チェック
 	if _, err := time.Parse("2006-01-02", dayTemplate.Date); err != nil {
 		errors = append(errors, fmt.Sprintf("invalid date format: %v", err))
 	}
-	
+
 	// 3. シード内容チェック
 	anomalyCount := 0
 	timeErrors := 0
-	
+
 	for i, seed := range dayTemplate.LogSeeds {
 		// タイムスタンプ範囲チェック（0-86399秒）
 		if seed.Timestamp < 0 || seed.Timestamp >= 86400 {
@@ -73,34 +73,34 @@ func validateAction(c *cli.Command) error {
 			}
 			timeErrors++
 		}
-		
+
 		// パターンチェック
 		if seed.Pattern > 0 {
 			anomalyCount++
 		}
-		
+
 		if seed.Pattern > 10 {
 			errors = append(errors, fmt.Sprintf("seed %d: invalid pattern %d", i, seed.Pattern))
 		}
 	}
-	
+
 	if timeErrors > 5 {
 		errors = append(errors, fmt.Sprintf("... and %d more timestamp errors", timeErrors-5))
 	}
-	
+
 	// 4. 異常率チェック
 	anomalyRatio := float64(anomalyCount) / float64(len(dayTemplate.LogSeeds))
 	if anomalyRatio < 0.05 || anomalyRatio > 0.5 {
-		errors = append(errors, fmt.Sprintf("unusual anomaly ratio: %.2f%% (%d/%d)", 
+		errors = append(errors, fmt.Sprintf("unusual anomaly ratio: %.2f%% (%d/%d)",
 			anomalyRatio*100, anomalyCount, len(dayTemplate.LogSeeds)))
 	}
-	
+
 	// 5. バージョン互換性チェック
 	if dayTemplate.Metadata.LogCoreVersion != logcore.LogCoreVersion {
 		errors = append(errors, fmt.Sprintf("logcore version mismatch: file=%s, current=%s",
 			dayTemplate.Metadata.LogCoreVersion, logcore.LogCoreVersion))
 	}
-	
+
 	// 結果出力
 	if len(errors) == 0 {
 		fmt.Printf("✅ Validation passed!\n")
@@ -117,6 +117,6 @@ func validateAction(c *cli.Command) error {
 		}
 		return fmt.Errorf("validation failed")
 	}
-	
+
 	return nil
 }

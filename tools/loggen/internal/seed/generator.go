@@ -34,33 +34,33 @@ func (g *Generator) GenerateDayTemplate(date time.Time, anomalyRatio float64) (*
 			AnomalyStats:      make(map[string]int),
 		},
 	}
-	
+
 	// 1秒ごとにログシードを生成
 	for second := 0; second < 86400; second++ {
 		currentTime := date.Add(time.Duration(second) * time.Second)
-		
+
 		// この秒のログ件数決定（平均10件、時間帯による調整）
 		logCount := g.generateLogCount(currentTime)
-		
+
 		for i := 0; i < logCount; i++ {
 			seed := logcore.LogSeed{
 				Timestamp: int64(second),
 				Seed:      g.generateSecondSeed(currentTime, i),
 			}
-			
+
 			// 時間帯・曜日による活動パターン決定
 			seed.EventType, seed.UserIndex, seed.ResourceIdx = g.selectActivityPattern(currentTime, i)
-			
+
 			// 異常パターンの配置判定
 			seed.Pattern = g.determineAnomalyPattern(currentTime, i, anomalyRatio)
-			
+
 			template.LogSeeds = append(template.LogSeeds, seed)
 		}
 	}
-	
+
 	// 統計情報更新
 	g.updateStats(template)
-	
+
 	return template, nil
 }
 
@@ -68,10 +68,10 @@ func (g *Generator) GenerateDayTemplate(date time.Time, anomalyRatio float64) (*
 func (g *Generator) generateLogCount(t time.Time) int {
 	hour := t.Hour()
 	weekday := t.Weekday()
-	
+
 	// 時間帯・曜日による期待値調整
 	expectedRate := g.getExpectedRate(hour, weekday)
-	
+
 	// ポワソン分布でログ件数決定
 	return g.poissonRandom(expectedRate)
 }
@@ -80,23 +80,23 @@ func (g *Generator) generateLogCount(t time.Time) int {
 func (g *Generator) getExpectedRate(hour int, weekday time.Weekday) float64 {
 	// 基本レート: 毎秒10件
 	baseRate := 10.0
-	
+
 	// 時間帯補正
 	timeMultiplier := map[int]float64{
-		0: 0.1, 1: 0.05, 2: 0.05, 3: 0.05, 4: 0.05, 5: 0.1,  // 深夜
-		6: 0.2, 7: 0.4, 8: 0.8,                               // 朝
-		9: 1.2, 10: 1.5, 11: 1.8, 12: 1.0,                   // 午前〜昼
+		0: 0.1, 1: 0.05, 2: 0.05, 3: 0.05, 4: 0.05, 5: 0.1, // 深夜
+		6: 0.2, 7: 0.4, 8: 0.8, // 朝
+		9: 1.2, 10: 1.5, 11: 1.8, 12: 1.0, // 午前〜昼
 		13: 0.8, 14: 1.3, 15: 1.6, 16: 1.4, 17: 1.1, 18: 0.9, // 午後
-		19: 0.6, 20: 0.4, 21: 0.3, 22: 0.2, 23: 0.15,        // 夜
+		19: 0.6, 20: 0.4, 21: 0.3, 22: 0.2, 23: 0.15, // 夜
 	}
-	
+
 	// 曜日補正
 	weekdayMultiplier := map[time.Weekday]float64{
 		time.Monday: 1.0, time.Tuesday: 1.1, time.Wednesday: 1.2,
-		time.Thursday: 1.1, time.Friday: 0.9, 
+		time.Thursday: 1.1, time.Friday: 0.9,
 		time.Saturday: 0.3, time.Sunday: 0.2,
 	}
-	
+
 	return baseRate * timeMultiplier[hour] * weekdayMultiplier[weekday]
 }
 
@@ -105,20 +105,20 @@ func (g *Generator) poissonRandom(lambda float64) int {
 	if lambda == 0 {
 		return 0
 	}
-	
+
 	// 簡易ポワソン分布（小さいλの場合）
 	if lambda < 10 {
 		L := math.Exp(-lambda)
 		k := 0
 		p := 1.0
-		
+
 		for p > L {
 			k++
 			p *= rand.Float64()
 		}
 		return k - 1
 	}
-	
+
 	// 大きいλの場合は正規近似
 	mean := lambda
 	stddev := math.Sqrt(lambda)
@@ -138,10 +138,10 @@ func (g *Generator) generateSecondSeed(currentTime time.Time, sequence int) uint
 func (g *Generator) selectActivityPattern(currentTime time.Time, sequence int) (uint8, uint8, uint8) {
 	// シーケンスベースのランダム生成器
 	rng := rand.New(rand.NewSource(currentTime.Unix() + int64(sequence)))
-	
+
 	hour := currentTime.Hour()
 	weekday := currentTime.Weekday()
-	
+
 	// イベントタイプ決定
 	var eventType uint8
 	switch {
@@ -155,13 +155,13 @@ func (g *Generator) selectActivityPattern(currentTime time.Time, sequence int) (
 		// その他の時間
 		eventType = logcore.EventTypeLogin
 	}
-	
+
 	// ユーザー選択（重み付き）
 	userIndex := g.selectUser(rng, hour)
-	
+
 	// リソース選択
 	resourceIndex := g.selectResource(rng, eventType)
-	
+
 	return eventType, userIndex, resourceIndex
 }
 
@@ -173,7 +173,7 @@ func (g *Generator) selectBusinessHoursEvent(rng *rand.Rand) uint8 {
 		logcore.EventTypeAdmin:       15,
 		logcore.EventTypeCalendar:    5,
 	}
-	
+
 	return g.weightedSelect(rng, weights)
 }
 
@@ -184,7 +184,7 @@ func (g *Generator) selectOvertimeEvent(rng *rand.Rand) uint8 {
 		logcore.EventTypeLogin:       20,
 		logcore.EventTypeAdmin:       10,
 	}
-	
+
 	return g.weightedSelect(rng, weights)
 }
 
@@ -194,17 +194,17 @@ func (g *Generator) weightedSelect(rng *rand.Rand, weights map[uint8]int) uint8 
 	for _, weight := range weights {
 		total += weight
 	}
-	
+
 	r := rng.Intn(total)
 	current := 0
-	
+
 	for value, weight := range weights {
 		current += weight
 		if r < current {
 			return value
 		}
 	}
-	
+
 	// フォールバック
 	for value := range weights {
 		return value
@@ -215,13 +215,13 @@ func (g *Generator) weightedSelect(rng *rand.Rand, weights map[uint8]int) uint8 
 // ユーザー選択
 func (g *Generator) selectUser(rng *rand.Rand, hour int) uint8 {
 	userCount := len(g.config.Users)
-	
+
 	// 時間帯によるユーザー活動確率調整
 	if hour >= 9 && hour <= 18 {
 		// 業務時間内は内部ユーザーが多い
 		return uint8(rng.Intn(userCount - 2)) // 外部ユーザー除外
 	}
-	
+
 	// その他の時間は全ユーザー
 	return uint8(rng.Intn(userCount))
 }
@@ -229,7 +229,7 @@ func (g *Generator) selectUser(rng *rand.Rand, hour int) uint8 {
 // リソース選択
 func (g *Generator) selectResource(rng *rand.Rand, eventType uint8) uint8 {
 	resourceCount := len(g.config.Resources)
-	
+
 	switch eventType {
 	case logcore.EventTypeAdmin:
 		// 管理者設定は管理リソース
@@ -245,15 +245,15 @@ func (g *Generator) selectResource(rng *rand.Rand, eventType uint8) uint8 {
 // 異常パターン決定
 func (g *Generator) determineAnomalyPattern(t time.Time, sequenceInSecond int, anomalyRatio float64) uint8 {
 	hour := t.Hour()
-	
+
 	// 基本的な異常確率
 	baseAnomalyProb := anomalyRatio
-	
+
 	// 実例1: 夜間の管理者による大量学習データダウンロード
 	if (hour >= 18 || hour <= 9) && rand.Float64() < baseAnomalyProb*0.3 {
 		return logcore.PatternExample1NightAdminDownload
 	}
-	
+
 	// 実例2: anyone with link設定ミスによる外部流出（まとまって発生）
 	if hour >= 10 && hour <= 16 {
 		// 15分間隔でバーストパターン（外部からの自動アクセス）
@@ -261,31 +261,31 @@ func (g *Generator) determineAnomalyPattern(t time.Time, sequenceInSecond int, a
 			return logcore.PatternExample2ExternalLinkAccess
 		}
 	}
-	
+
 	// 実例3: VPN脆弱性経由の水平移動攻撃（業務時間内の怪しい動作）
 	if hour >= 9 && hour <= 18 && rand.Float64() < baseAnomalyProb*0.2 {
 		return logcore.PatternExample3VpnLateralMovement
 	}
-	
+
 	// 一般的な軽微異常
 	if rand.Float64() < baseAnomalyProb*0.3 {
 		return uint8(int(logcore.PatternTimeAnomaly) + rand.Intn(2)) // Pattern 4-5
 	}
-	
+
 	return logcore.PatternNormal
 }
 
 // 統計情報更新
 func (g *Generator) updateStats(template *logcore.DayTemplate) {
 	template.Metadata.TotalLogs = len(template.LogSeeds)
-	
+
 	anomalyCount := 0
 	for _, seed := range template.LogSeeds {
 		if seed.Pattern > 0 {
 			anomalyCount++
 		}
 	}
-	
+
 	template.Metadata.NormalRatio = float64(len(template.LogSeeds)-anomalyCount) / float64(len(template.LogSeeds))
 	template.Metadata.AnomalyStats["total"] = anomalyCount
 	template.Metadata.AnomalyStats["example1"] = g.countPattern(template.LogSeeds, logcore.PatternExample1NightAdminDownload)

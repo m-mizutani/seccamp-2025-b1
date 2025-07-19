@@ -9,7 +9,7 @@ const (
 
 // 1日分のログシード（864,000件）
 type DayTemplate struct {
-	Date     string    `json:"date"`     // "2024-08-12"
+	Date     string    `json:"date"`      // "2024-08-12"
 	LogSeeds []LogSeed `json:"log_seeds"` // 864,000個のシード
 	Metadata SeedMeta  `json:"metadata"`
 }
@@ -19,19 +19,19 @@ type LogSeed struct {
 	Timestamp   int64  `json:"ts"`   // Unix秒 (相対時刻)
 	EventType   uint8  `json:"et"`   // イベント種別ID
 	UserIndex   uint8  `json:"ui"`   // ユーザーインデックス
-	ResourceIdx uint8  `json:"ri"`   // リソースインデックス  
+	ResourceIdx uint8  `json:"ri"`   // リソースインデックス
 	Pattern     uint8  `json:"pt"`   // 正常(0)/異常(1-10)パターン
 	Seed        uint32 `json:"seed"` // この秒のランダムシード
 }
 
 // シードメタデータ
 type SeedMeta struct {
-	TotalLogs       int            `json:"total_logs"`
-	NormalRatio     float64        `json:"normal_ratio"`
-	AnomalyStats    map[string]int `json:"anomaly_stats"`
-	Generated       time.Time      `json:"generated"`
-	LogCoreVersion  string         `json:"logcore_version"`
-	SeedFormatVersion string       `json:"seed_format_version"`
+	TotalLogs         int            `json:"total_logs"`
+	NormalRatio       float64        `json:"normal_ratio"`
+	AnomalyStats      map[string]int `json:"anomaly_stats"`
+	Generated         time.Time      `json:"generated"`
+	LogCoreVersion    string         `json:"logcore_version"`
+	SeedFormatVersion string         `json:"seed_format_version"`
 }
 
 // Google Workspace監査ログエントリ構造
@@ -85,11 +85,11 @@ type Resource struct {
 }
 
 type Config struct {
-	CustomerID   string     `json:"customer_id"`
-	OwnerDomain  string     `json:"owner_domain"`
-	Users        []User     `json:"users"`
-	Resources    []Resource `json:"resources"`
-	BaseDate     time.Time  `json:"base_date"`
+	CustomerID  string     `json:"customer_id"`
+	OwnerDomain string     `json:"owner_domain"`
+	Users       []User     `json:"users"`
+	Resources   []Resource `json:"resources"`
+	BaseDate    time.Time  `json:"base_date"`
 }
 
 // イベント種別定数
@@ -100,7 +100,7 @@ const (
 	EventTypeCalendar    uint8 = 4
 )
 
-// 異常パターン定数  
+// 異常パターン定数
 const (
 	PatternNormal                     uint8 = 0
 	PatternExample1NightAdminDownload uint8 = 1
