@@ -272,6 +272,105 @@ resource "aws_lambda_function_url" "auditlog" {
   }
 }
 
+###########################################
+# Importer Lambda (Log Importer)
+###########################################
+
+# Build importer Lambda binary
+resource "null_resource" "build_importer" {
+  triggers = {
+    source_hash = data.archive_file.importer_source.output_base64sha256
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      cd ${path.module}/lambda/importer
+      GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap .
+    EOT
+    environment = {
+      PAGER = ""
+    }
+  }
+}
+
+# Archive source files for trigger detection
+data "archive_file" "importer_source" {
+  type        = "zip"
+  source_dir  = "${path.module}/lambda/importer"
+  output_path = "${path.module}/lambda/importer_source.zip"
+  excludes    = ["*.zip", "go.sum", "bootstrap", "*_test.go", "testdata"]
+}
+
+# Archive file for importer Lambda
+data "archive_file" "importer_lambda_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/lambda/importer"
+  output_path = "${path.module}/lambda/importer.zip"
+  excludes    = ["*.zip", "go.sum", "*_test.go", "testdata", "go.mod"]
+
+  depends_on = [null_resource.build_importer]
+}
+
+# Note: IAM resources for importer Lambda are defined in iam.tf
+
+# Importer Lambda function
+resource "aws_lambda_function" "importer" {
+  filename         = data.archive_file.importer_lambda_zip.output_path
+  function_name    = "${var.basename}-importer"
+  role             = aws_iam_role.importer_lambda.arn
+  handler          = "bootstrap"
+  source_code_hash = data.archive_file.importer_lambda_zip.output_base64sha256
+  runtime          = "provided.al2"
+  architectures    = ["arm64"]
+  timeout          = 300
+  memory_size      = 512
+
+  environment {
+    variables = {
+      AUDITLOG_URL   = aws_lambda_function_url.auditlog.function_url
+      S3_BUCKET_NAME = aws_s3_bucket.raw_logs.bucket
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.importer_lambda_basic,
+    aws_iam_role_policy_attachment.importer_lambda_s3,
+  ]
+
+  tags = merge(local.common_tags, {
+    Name = "${var.basename}-importer"
+    Type = "lambda-function"
+  })
+}
+
+# EventBridge rule for 5-minute interval execution
+resource "aws_cloudwatch_event_rule" "importer_schedule" {
+  name                = "${var.basename}-importer-schedule"
+  description         = "Trigger importer Lambda every 5 minutes"
+  schedule_expression = "rate(5 minutes)"
+
+  tags = merge(local.common_tags, {
+    Name = "${var.basename}-importer-schedule"
+    Type = "eventbridge-rule"
+  })
+}
+
+# EventBridge target
+resource "aws_cloudwatch_event_target" "importer_target" {
+  rule      = aws_cloudwatch_event_rule.importer_schedule.name
+  target_id = "${var.basename}-importer-target"
+  arn       = aws_lambda_function.importer.arn
+}
+
+# Permission for EventBridge to invoke Lambda
+resource "aws_lambda_permission" "allow_eventbridge" {
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.importer.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.importer_schedule.arn
+}
+
 # S3 bucket for Athena query results
 resource "aws_s3_bucket" "athena_results" {
   bucket = "${var.basename}-athena-results"

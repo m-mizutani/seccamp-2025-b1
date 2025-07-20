@@ -43,7 +43,12 @@ resource "aws_s3_bucket_notification" "raw_logs" {
 
   topic {
     topic_arn = aws_sns_topic.raw_logs.arn
-    events    = ["s3:ObjectCreated:*"]
+    events    = [
+      "s3:ObjectCreated:Put",
+      "s3:ObjectCreated:Post",
+      "s3:ObjectCreated:Copy",
+      "s3:ObjectCreated:CompleteMultipartUpload"
+    ]
   }
 
   depends_on = [aws_sns_topic_policy.raw_logs]
