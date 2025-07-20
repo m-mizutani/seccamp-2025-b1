@@ -21,17 +21,19 @@ func TestHandleSQSEvent_ValidEvent(t *testing.T) {
 	os.Setenv("SECURITY_LAKE_BUCKET", "test-security-lake-bucket")
 	os.Setenv("AWS_REGION", "ap-northeast-1")
 	os.Setenv("AWS_ACCOUNT_ID", "123456789012")
+	os.Setenv("CUSTOM_LOG_SOURCE", "google-workspace")
 	defer func() {
 		os.Unsetenv("SECURITY_LAKE_BUCKET")
 		os.Unsetenv("AWS_REGION")
 		os.Unsetenv("AWS_ACCOUNT_ID")
+		os.Unsetenv("CUSTOM_LOG_SOURCE")
 	}()
 
 	mockS3 := new(MockS3API)
 
-	// Test data - valid JSONL
-	testData := `{"id":"log001","timestamp":"2023-12-01T10:00:00Z","user":"alice","action":"login","target":"","success":true,"remote":"192.168.1.100"}
-{"id":"log002","timestamp":"2023-12-01T10:05:00Z","user":"bob","action":"read","target":"document1.txt","success":true,"remote":"192.168.1.101"}`
+	// Test data - valid Google Workspace JSONL
+	testData := `{"kind":"audit#activity","id":{"time":"2024-08-12T10:15:30.123456Z","uniqueQualifier":"358068855354","applicationName":"drive","customerId":"C03az79cb"},"actor":{"callerType":"USER","email":"user@muhai-academy.com","profileId":"114511147312345678901"},"ownerDomain":"muhai-academy.com","ipAddress":"203.0.113.255","events":[{"type":"access","name":"view","parameters":[{"name":"doc_id","value":"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"}]}]}
+{"kind":"audit#activity","id":{"time":"2024-08-12T22:30:15.789Z","uniqueQualifier":"358068855355","applicationName":"drive","customerId":"C03az79cb"},"actor":{"callerType":"USER","email":"admin@muhai-academy.com","profileId":"114511147312345678902"},"ownerDomain":"muhai-academy.com","ipAddress":"198.51.100.42","events":[{"type":"access","name":"download","parameters":[{"name":"doc_id","value":"1A2B3C4D5E6F7G8H9I0J"}]}]}`
 
 	// Setup S3 GetObject mock
 	mockS3.On("GetObject", mock.Anything, &s3.GetObjectInput{
@@ -50,16 +52,16 @@ func TestHandleSQSEvent_ValidEvent(t *testing.T) {
 			return false
 		}
 		key := *input.Key
-		// Verify Security Lake path format
-		return strings.Contains(key, "ext/service-logs/region=ap-northeast-1/accountId=123456789012/eventDay=") &&
-			strings.Contains(key, "eventHour=") &&
-			strings.HasSuffix(key, ".parquet")
+		// Verify Security Lake custom log source path format
+		return strings.Contains(key, "ext/google-workspace/region=ap-northeast-1/accountId=123456789012/eventDay=") &&
+			strings.HasSuffix(key, ".gz.parquet")
 	})).Return(&s3.PutObjectOutput{}, nil)
 
 	handler := &Handler{
 		s3Client:           mockS3,
 		securityLakeBucket: "test-security-lake-bucket",
 		region:             "ap-northeast-1",
+		customLogSource:    "google-workspace",
 	}
 
 	// Create SQS event with SNS notification containing S3 event
@@ -112,6 +114,7 @@ func TestHandleSQSEvent_InvalidJSON(t *testing.T) {
 		s3Client:           mockS3,
 		securityLakeBucket: "test-security-lake-bucket",
 		region:             "ap-northeast-1",
+		customLogSource:    "google-workspace",
 	}
 
 	// Create SQS event with invalid JSON
@@ -137,10 +140,12 @@ func TestHandleSQSEvent_S3GetObjectError(t *testing.T) {
 	os.Setenv("SECURITY_LAKE_BUCKET", "test-security-lake-bucket")
 	os.Setenv("AWS_REGION", "ap-northeast-1")
 	os.Setenv("AWS_ACCOUNT_ID", "123456789012")
+	os.Setenv("CUSTOM_LOG_SOURCE", "google-workspace")
 	defer func() {
 		os.Unsetenv("SECURITY_LAKE_BUCKET")
 		os.Unsetenv("AWS_REGION")
 		os.Unsetenv("AWS_ACCOUNT_ID")
+		os.Unsetenv("CUSTOM_LOG_SOURCE")
 	}()
 
 	mockS3 := new(MockS3API)
@@ -155,6 +160,7 @@ func TestHandleSQSEvent_S3GetObjectError(t *testing.T) {
 		s3Client:           mockS3,
 		securityLakeBucket: "test-security-lake-bucket",
 		region:             "ap-northeast-1",
+		customLogSource:    "google-workspace",
 	}
 
 	// Create SQS event
@@ -205,10 +211,12 @@ func TestHandleSQSEvent_EmptyFile(t *testing.T) {
 	os.Setenv("SECURITY_LAKE_BUCKET", "test-security-lake-bucket")
 	os.Setenv("AWS_REGION", "ap-northeast-1")
 	os.Setenv("AWS_ACCOUNT_ID", "123456789012")
+	os.Setenv("CUSTOM_LOG_SOURCE", "google-workspace")
 	defer func() {
 		os.Unsetenv("SECURITY_LAKE_BUCKET")
 		os.Unsetenv("AWS_REGION")
 		os.Unsetenv("AWS_ACCOUNT_ID")
+		os.Unsetenv("CUSTOM_LOG_SOURCE")
 	}()
 
 	mockS3 := new(MockS3API)
@@ -227,6 +235,7 @@ func TestHandleSQSEvent_EmptyFile(t *testing.T) {
 		s3Client:           mockS3,
 		securityLakeBucket: "test-security-lake-bucket",
 		region:             "ap-northeast-1",
+		customLogSource:    "google-workspace",
 	}
 
 	// Create SQS event

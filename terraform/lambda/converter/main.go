@@ -1,11 +1,11 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/url"
 	"os"
@@ -24,6 +24,7 @@ type Handler struct {
 	s3Client           S3API
 	securityLakeBucket string
 	region             string
+	customLogSource    string
 }
 
 func NewHandler() (*Handler, error) {
@@ -42,10 +43,16 @@ func NewHandler() (*Handler, error) {
 		return nil, fmt.Errorf("SECURITY_LAKE_BUCKET environment variable is required")
 	}
 
+	customLogSource := os.Getenv("CUSTOM_LOG_SOURCE")
+	if customLogSource == "" {
+		customLogSource = "google-workspace" // default value
+	}
+
 	return &Handler{
 		s3Client:           s3.NewFromConfig(cfg),
 		securityLakeBucket: securityLakeBucket,
 		region:             region,
+		customLogSource:    customLogSource,
 	}, nil
 }
 
@@ -112,65 +119,74 @@ func (h *Handler) processS3Record(ctx context.Context, record events.S3EventReco
 	}
 	defer resp.Body.Close()
 
-	// Parse JSONL file
-	var rawLogs []RawLog
-	scanner := bufio.NewScanner(resp.Body)
+	// Parse JSON/JSONL file containing Google Workspace logs
+	var gwLogs []GoogleWorkspaceLog
+	decoder := json.NewDecoder(resp.Body)
 	lineNum := 0
 
-	for scanner.Scan() {
+	for {
 		lineNum++
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
+		var gwLog GoogleWorkspaceLog
+		err := decoder.Decode(&gwLog)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Printf("Failed to parse JSON at position %d: %v", lineNum, err)
+			// Try to skip to next valid JSON if this is JSONL with a corrupt line
 			continue
 		}
-
-		var rawLog RawLog
-		if err := json.Unmarshal([]byte(line), &rawLog); err != nil {
-			log.Printf("Failed to parse line %d: %s, error: %v", lineNum, line, err)
-			continue
-		}
-		rawLogs = append(rawLogs, rawLog)
+		gwLogs = append(gwLogs, gwLog)
 	}
 
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error reading file: %w", err)
-	}
-
-	if len(rawLogs) == 0 {
+	if len(gwLogs) == 0 {
 		log.Printf("No valid logs found in file %s", key)
 		return nil
 	}
 
-	// Convert to Parquet format
-	var parquetLogs []ParquetLog
-	for _, rawLog := range rawLogs {
-		parquetLogs = append(parquetLogs, rawLog.ToParquetLog())
+	// Get AWS account ID
+	accountID := os.Getenv("AWS_ACCOUNT_ID")
+	if accountID == "" {
+		return fmt.Errorf("AWS_ACCOUNT_ID environment variable is required")
+	}
+
+	// Convert to OCSF format
+	var ocsfLogs []OCSFWebResourceActivity
+	for _, gwLog := range gwLogs {
+		ocsfLog, err := ConvertToOCSF(&gwLog, h.region, accountID)
+		if err != nil {
+			log.Printf("Failed to convert log to OCSF format: %v", err)
+			continue
+		}
+		ocsfLogs = append(ocsfLogs, *ocsfLog)
 	}
 
 	// Generate Parquet file
-	parquetData, err := h.generateParquetFile(parquetLogs)
+	parquetData, err := h.generateOCSFParquetFile(ocsfLogs)
 	if err != nil {
 		return fmt.Errorf("failed to generate parquet file: %w", err)
 	}
 
-	// Generate Security Lake compliant path
-	// Security Lake path format: ext/{source_name}/region={region}/accountId={accountId}/eventDay={YYYYMMDD}/eventHour={HH}/
-	now := time.Now().UTC()
-	accountId := os.Getenv("AWS_ACCOUNT_ID")
-	if accountId == "" {
-		return fmt.Errorf("AWS_ACCOUNT_ID environment variable is required")
+	// Extract bucket name from ARN if needed
+	securityLakeBucket := h.securityLakeBucket
+	if after, ok := strings.CutPrefix(securityLakeBucket, "arn:aws:s3:::"); ok {
+		securityLakeBucket = after
 	}
 
-	securityLakeKey := fmt.Sprintf("ext/service-logs/region=%s/accountId=%s/eventDay=%s/eventHour=%02d/%s.parquet",
+	// Generate Security Lake compliant path for custom log source
+	// Custom log source path format: ext/{customSourceName}/region={region}/accountId={accountId}/eventDay={YYYYMMDD}/
+	now := time.Now().UTC()
+	securityLakeKey := fmt.Sprintf("ext/%s/region=%s/accountId=%s/eventDay=%s/%s_%s.gz.parquet",
+		h.customLogSource,
 		h.region,
-		accountId,
+		accountID,
 		now.Format("20060102"),
-		now.Hour(),
+		now.Format("20060102150405"),
 		strings.ReplaceAll(key, "/", "_"))
 
 	// Upload to Security Lake S3 bucket
 	_, err = h.s3Client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:      aws.String(h.securityLakeBucket),
+		Bucket:      aws.String(securityLakeBucket),
 		Key:         aws.String(securityLakeKey),
 		Body:        bytes.NewReader(parquetData),
 		ContentType: aws.String("application/octet-stream"),
@@ -179,14 +195,14 @@ func (h *Handler) processS3Record(ctx context.Context, record events.S3EventReco
 		return fmt.Errorf("failed to upload parquet file to Security Lake: %w", err)
 	}
 
-	log.Printf("Successfully uploaded parquet file to Security Lake: s3://%s/%s", h.securityLakeBucket, securityLakeKey)
+	log.Printf("Successfully uploaded parquet file to Security Lake: s3://%s/%s", securityLakeBucket, securityLakeKey)
 	return nil
 }
 
-func (h *Handler) generateParquetFile(logs []ParquetLog) ([]byte, error) {
+func (h *Handler) generateOCSFParquetFile(logs []OCSFWebResourceActivity) ([]byte, error) {
 	var buf bytes.Buffer
 
-	writer := parquet.NewGenericWriter[ParquetLog](&buf)
+	writer := parquet.NewGenericWriter[OCSFWebResourceActivity](&buf)
 	defer writer.Close()
 
 	_, err := writer.Write(logs)
