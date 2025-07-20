@@ -8,7 +8,7 @@ tools/loggen/loggen
 tools/loggen/output/
 
 # Lambda build artifacts
-terraform/lambda/auditlog/bootstrap
+bootstrap
 terraform/lambda/auditlog_source.zip
 terraform/lambda/auditlog.zip
 

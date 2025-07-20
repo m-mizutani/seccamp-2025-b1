@@ -25,21 +25,33 @@ output "auditlog_lambda_url" {
   value       = aws_lambda_function_url.auditlog.function_url
 }
 
-# Team-specific outputs
-output "teams" {
-  description = "Map of team resources"
-  value = {
-    for team_name, team_module in module.team : team_name => {
-      team_name                     = team_module.team_name
-      raw_logs_bucket_name          = team_module.raw_logs_bucket_name
-      raw_logs_bucket_arn           = team_module.raw_logs_bucket_arn
-      raw_logs_sns_topic_arn        = team_module.raw_logs_sns_topic_arn
-      raw_logs_sqs_queue_arn        = team_module.raw_logs_sqs_queue_arn
-      converter_lambda_function_arn = team_module.converter_lambda_function_arn
-      converter_iam_role_name       = team_module.converter_iam_role_name
-      importer_iam_role_name        = team_module.importer_iam_role_name
-      detector_iam_role_name        = team_module.detector_iam_role_name
-      custom_log_source_name        = team_module.custom_log_source_name
-    }
-  }
+# Shared resource outputs
+output "raw_logs_sns_topic_arn" {
+  description = "SNS topic ARN for raw logs"
+  value       = aws_sns_topic.raw_logs.arn
+}
+
+output "raw_logs_sqs_queue_arn" {
+  description = "SQS queue ARN for raw logs"
+  value       = aws_sqs_queue.raw_logs.arn
+}
+
+output "converter_lambda_function_arn" {
+  description = "Converter Lambda function ARN"
+  value       = aws_lambda_function.converter.arn
+}
+
+output "converter_lambda_function_name" {
+  description = "Converter Lambda function name"
+  value       = aws_lambda_function.converter.function_name
+}
+
+output "alerts_sns_topic_arn" {
+  description = "SNS topic ARN for alerts"
+  value       = aws_sns_topic.alerts.arn
+}
+
+output "athena_results_bucket" {
+  description = "S3 bucket for Athena query results"
+  value       = aws_s3_bucket.athena_results.bucket
 } 

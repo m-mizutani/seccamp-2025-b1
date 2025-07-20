@@ -16,8 +16,4 @@ variable "enable_external_subscriber" {
   default     = false
 }
 
-variable "teams" {
-  description = "List of team names"
-  type        = list(string)
-  default     = ["blue", "green"]  # Start with one team for testing
-}
+# Team variable removed - using shared resources only
