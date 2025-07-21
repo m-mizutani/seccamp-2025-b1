@@ -2,53 +2,8 @@
 # Amazon Security Lake Configuration
 ###########################################
 
-# KMS Key for Security Lake encryption
-resource "aws_kms_key" "security_lake" {
-  description         = "KMS key for Security Lake encryption"
-  key_usage           = "ENCRYPT_DECRYPT"
-  deletion_window_in_days = 7
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "Enable IAM User Permissions"
-        Effect = "Allow"
-        Principal = {
-          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
-        }
-        Action   = "kms:*"
-        Resource = "*"
-      },
-      {
-        Sid    = "Allow Security Lake service"
-        Effect = "Allow"
-        Principal = {
-          Service = "securitylake.amazonaws.com"
-        }
-        Action = [
-          "kms:Decrypt",
-          "kms:DescribeKey",
-          "kms:Encrypt",
-          "kms:GenerateDataKey",
-          "kms:ReEncrypt*"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-
-  tags = merge(local.common_tags, {
-    Name = "${var.basename}-security-lake-kms"
-    Type = "kms-key"
-  })
-}
-
-# KMS Key Alias
-resource "aws_kms_alias" "security_lake" {
-  name          = "alias/${var.basename}-security-lake"
-  target_key_id = aws_kms_key.security_lake.key_id
-}
+# KMS Key for Security Lake encryption - REMOVED
+# Using S3_MANAGED_KEY instead to avoid complexity
 
 # Data source for existing V2 role
 data "aws_iam_role" "security_lake_meta_store_v2" {
@@ -61,7 +16,10 @@ resource "aws_securitylake_data_lake" "main" {
 
   configuration {
     region = var.aws_region
-    # KMS encryption disabled to avoid complexity
+    # Use S3 managed encryption instead of KMS to avoid complexity
+    encryption_configuration {
+      kms_key_id = "S3_MANAGED_KEY"
+    }
     lifecycle_configuration {
       expiration {
         days = 365

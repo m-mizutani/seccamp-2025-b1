@@ -90,7 +90,7 @@ type OCSFWebResourceActivity struct {
 			Name string `parquet:"name"`
 			UID  string `parquet:"uid,optional"`
 		} `parquet:"org,optional"`
-		Region string `parquet:"region,optional"`
+		Region string `parquet:"cloud_region,optional"`
 	} `parquet:"cloud"`
 
 	// Source endpoint

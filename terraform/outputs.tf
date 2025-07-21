@@ -61,7 +61,7 @@ output "athena_workgroup" {
   value       = aws_athena_workgroup.main.name
 }
 
-output "athena_database" {
-  description = "Athena database name"
-  value       = aws_glue_catalog_database.main.name
-}
+# output "athena_database" {
+#   description = "Athena database name"
+#   value       = aws_glue_catalog_database.main.name
+# }
