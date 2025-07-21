@@ -11,7 +11,7 @@ resource "null_resource" "build_converter" {
   provisioner "local-exec" {
     command = <<-EOT
       cd ${path.module}/lambda/converter
-      GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap main.go types.go s3_interface.go convert.go
+      GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap main.go types.go s3_interface.go convert.go arrow_writer.go
     EOT
     environment = {
       PAGER = ""

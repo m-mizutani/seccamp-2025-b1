@@ -18,7 +18,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/parquet-go/parquet-go"
 )
 
 type Handler struct {
@@ -344,13 +343,23 @@ func (h *Handler) processS3Record(ctx context.Context, record events.S3EventReco
 	// Generate Security Lake compliant path for custom log source
 	// Custom log source path format: ext/{customSourceName}/{version}/region={region}/accountId={accountId}/eventDay={YYYYMMDD}/
 	now := time.Now().UTC()
-	securityLakeKey := fmt.Sprintf("ext/%s/1.0/region=%s/accountId=%s/eventDay=%s/%s_%s.gz.parquet",
+	
+	// Clean up the filename - remove extensions and path separators
+	baseFileName := key
+	// Remove .gz extension if present
+	baseFileName = strings.TrimSuffix(baseFileName, ".gz")
+	// Remove .jsonl extension if present
+	baseFileName = strings.TrimSuffix(baseFileName, ".jsonl")
+	// Replace path separators
+	baseFileName = strings.ReplaceAll(baseFileName, "/", "_")
+	
+	securityLakeKey := fmt.Sprintf("ext/%s/1.0/region=%s/accountId=%s/eventDay=%s/%s_%s.parquet",
 		h.customLogSource,
 		h.region,
 		accountID,
 		now.Format("20060102"),
 		now.Format("20060102150405"),
-		strings.ReplaceAll(key, "/", "_"))
+		baseFileName)
 	slog.Info("Generated Security Lake key", "key", securityLakeKey)
 
 	// Upload to Security Lake S3 bucket
@@ -371,21 +380,8 @@ func (h *Handler) processS3Record(ctx context.Context, record events.S3EventReco
 }
 
 func (h *Handler) generateOCSFParquetFile(logs []OCSFWebResourceActivity) ([]byte, error) {
-	var buf bytes.Buffer
-
-	writer := parquet.NewGenericWriter[OCSFWebResourceActivity](&buf)
-	defer writer.Close()
-
-	_, err := writer.Write(logs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write parquet data: %w", err)
-	}
-
-	if err := writer.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close parquet writer: %w", err)
-	}
-
-	return buf.Bytes(), nil
+	// Use Apache Arrow implementation
+	return generateOCSFParquetFileArrow(logs)
 }
 
 func main() {
