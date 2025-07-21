@@ -17,10 +17,10 @@ func TestGoogleWorkspaceLogToOCSF_Conversion(t *testing.T) {
 			ApplicationName  string `json:"applicationName"`
 			CustomerID       string `json:"customerId"`
 		}{
-			Time:            "2024-08-12T10:15:30.123456Z",
-			UniqueQualifier: "358068855354",
-			ApplicationName: "drive",
-			CustomerID:      "C03az79cb",
+			Time:             "2024-08-12T10:15:30.123456Z",
+			UniqueQualifier:  "358068855354",
+			ApplicationName:  "drive",
+			CustomerID:       "C03az79cb",
 		},
 		Actor: struct {
 			CallerType string `json:"callerType"`
@@ -37,28 +37,27 @@ func TestGoogleWorkspaceLogToOCSF_Conversion(t *testing.T) {
 			Type       string `json:"type"`
 			Name       string `json:"name"`
 			Parameters []struct {
-				Name           string   `json:"name"`
-				Value          string   `json:"value,omitempty"`
-				BoolValue      bool     `json:"boolValue,omitempty"`
-				IntValue       int64    `json:"intValue,omitempty"`
-				MultiStrValue  []string `json:"multiStrValue,omitempty"`
-				MultiIntValue  []int64  `json:"multiIntValue,omitempty"`
+				Name         string      `json:"name"`
+				Value        interface{} `json:"value"`
+				IntValue     *int64      `json:"intValue,omitempty"`
+				BoolValue    *bool       `json:"boolValue,omitempty"`
+				MultiValue   []string    `json:"multiValue,omitempty"`
 			} `json:"parameters,omitempty"`
 		}{
 			{
 				Type: "access",
 				Name: "view",
 				Parameters: []struct {
-					Name           string   `json:"name"`
-					Value          string   `json:"value,omitempty"`
-					BoolValue      bool     `json:"boolValue,omitempty"`
-					IntValue       int64    `json:"intValue,omitempty"`
-					MultiStrValue  []string `json:"multiStrValue,omitempty"`
-					MultiIntValue  []int64  `json:"multiIntValue,omitempty"`
+					Name         string      `json:"name"`
+					Value        interface{} `json:"value"`
+					IntValue     *int64      `json:"intValue,omitempty"`
+					BoolValue    *bool       `json:"boolValue,omitempty"`
+					MultiValue   []string    `json:"multiValue,omitempty"`
 				}{
-					{Name: "doc_id", Value: "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"},
-					{Name: "doc_title", Value: "学習進捗データ"},
-					{Name: "doc_type", Value: "spreadsheet"},
+					{
+						Name:  "doc_id",
+						Value: "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+					},
 				},
 			},
 		},
@@ -73,9 +72,11 @@ func TestGoogleWorkspaceLogToOCSF_Conversion(t *testing.T) {
 	assert.Equal(t, 1, ocsfLog.SeverityID) // Informational
 	assert.Equal(t, 1, ocsfLog.StatusID)   // Success
 	assert.Equal(t, "user@muhai-academy.com", ocsfLog.Actor.User.EmailAddr)
+	assert.Equal(t, "114511147312345678901", ocsfLog.Actor.User.UID)
 	assert.Equal(t, "203.0.113.255", ocsfLog.SrcEndpoint.IP)
 	assert.Equal(t, "Google Drive API", ocsfLog.API.Service.Name)
 	assert.Equal(t, "view", ocsfLog.API.Operation)
+	assert.Equal(t, "358068855354", ocsfLog.Metadata.UID) // uniqueQualifier as UID
 }
 
 func TestGenerateOCSFParquetFile_ValidData(t *testing.T) {

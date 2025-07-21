@@ -14,17 +14,29 @@ func ConvertToOCSF(log *GoogleWorkspaceLog, region string, accountID string) (*O
 		return nil, fmt.Errorf("failed to parse timestamp: %w", err)
 	}
 
+	// Get first event (Google Workspace logs can have multiple events)
+	var firstEvent struct {
+		Type   string `json:"type"`
+		Name   string `json:"name"`
+		Action string `json:"action"`
+	}
+	if len(log.Events) > 0 {
+		firstEvent.Type = log.Events[0].Type
+		firstEvent.Name = log.Events[0].Name
+		firstEvent.Action = log.ID.ApplicationName // Use application name as action
+	}
+
 	// Determine activity_id based on event type and name
-	activityID := mapActivityID(log.ID.ApplicationName, log.Events)
-	
+	activityID := mapActivityIDFromEvent(firstEvent)
+
 	// Determine severity_id
-	severityID := mapSeverityID(log.ID.ApplicationName, log.Events)
-	
-	// Determine status_id
-	statusID := mapStatusID(log.Events)
-	
+	severityID := mapSeverityIDFromEvent(firstEvent)
+
+	// Determine status_id (assume success since Google Workspace logs successful events)
+	statusID := 1 // Success
+
 	// Determine user type (admin or regular user)
-	userTypeID := mapUserTypeID(log.ID.ApplicationName, log.Events)
+	userTypeID := mapUserTypeIDFromEvent(firstEvent)
 
 	ocsf := &OCSFWebResourceActivity{
 		// Basic classification
@@ -43,27 +55,30 @@ func ConvertToOCSF(log *GoogleWorkspaceLog, region string, accountID string) (*O
 	}
 
 	// Actor information
-	ocsf.Actor.User.Name = log.Actor.Email
 	ocsf.Actor.User.UID = log.Actor.ProfileID
+	if ocsf.Actor.User.UID == "" {
+		ocsf.Actor.User.UID = log.Actor.Email // Fallback to email if ProfileID not available
+	}
 	ocsf.Actor.User.EmailAddr = log.Actor.Email
 	ocsf.Actor.User.Domain = log.OwnerDomain
 	ocsf.Actor.User.TypeID = userTypeID
-	
-	// Session information
-	ocsf.Actor.Session.UID = log.ID.UniqueQualifier
+
+	// Session information - generate UID from email and timestamp
+	ocsf.Actor.Session.UID = fmt.Sprintf("%s_%d", log.Actor.Email, timestamp.Unix())
 	ocsf.Actor.Session.CreatedTime = timestamp.Add(-1 * time.Hour).UnixMilli() // Estimate session start
-	
+
 	// App information
 	ocsf.Actor.AppName = "Google Workspace"
 	ocsf.Actor.AppUID = log.ID.ApplicationName
 
 	// API information
-	ocsf.API.Service.Name = mapServiceName(log.ID.ApplicationName)
+	ocsf.API.Service.Name = mapServiceNameFromEvent(firstEvent)
 	ocsf.API.Service.Version = "v3"
-	if len(log.Events) > 0 {
-		ocsf.API.Operation = log.Events[0].Name
+	ocsf.API.Operation = firstEvent.Name
+	if ocsf.API.Operation == "" {
+		ocsf.API.Operation = firstEvent.Type
 	}
-	ocsf.API.Request.UID = log.ID.UniqueQualifier
+	ocsf.API.Request.UID = fmt.Sprintf("req_%d", timestamp.Unix())
 	ocsf.API.Response.Code = getResponseCode(statusID)
 	ocsf.API.Response.Message = getResponseMessage(statusID)
 
@@ -72,285 +87,105 @@ func ConvertToOCSF(log *GoogleWorkspaceLog, region string, accountID string) (*O
 	ocsf.Cloud.Account.UID = log.ID.CustomerID
 	ocsf.Cloud.Account.Name = strings.Split(log.OwnerDomain, ".")[0]
 	ocsf.Cloud.Org.Name = log.OwnerDomain
-	ocsf.Cloud.Org.UID = strings.Split(log.OwnerDomain, ".")[0]
+	ocsf.Cloud.Org.UID = log.ID.CustomerID
 	ocsf.Cloud.Region = "asia-northeast1" // Default to Tokyo region
 
 	// Source endpoint
 	ocsf.SrcEndpoint.IP = log.IPAddress
-	
-	// Web resources (if applicable)
-	ocsf.WebResources = extractWebResources(log.Events)
+	// Location information is not available in the original Google Workspace log structure
+
+	// Web resources - extract from event parameters
+	ocsf.WebResources = extractWebResourcesFromEventParameters(log.Events)
+
+	// Store original log data in observables for easier analysis
+	observables := []struct {
+		Name  string `parquet:"name"`
+		Type  string `parquet:"type"`
+		Value string `parquet:"value"`
+	}{
+		{Name: "kind", Type: "original", Value: log.Kind},
+		{Name: "unique_qualifier", Type: "original", Value: log.ID.UniqueQualifier},
+		{Name: "application_name", Type: "original", Value: log.ID.ApplicationName},
+		{Name: "customer_id", Type: "original", Value: log.ID.CustomerID},
+		{Name: "caller_type", Type: "original", Value: log.Actor.CallerType},
+		{Name: "actor_email", Type: "original", Value: log.Actor.Email},
+		{Name: "actor_profile_id", Type: "original", Value: log.Actor.ProfileID},
+		{Name: "owner_domain", Type: "original", Value: log.OwnerDomain},
+		{Name: "ip_address", Type: "original", Value: log.IPAddress},
+	}
+
+	// Add event information
+	for i, event := range log.Events {
+		observables = append(observables,
+			struct {
+				Name  string `parquet:"name"`
+				Type  string `parquet:"type"`
+				Value string `parquet:"value"`
+			}{Name: fmt.Sprintf("event_%d_type", i), Type: "original", Value: event.Type},
+			struct {
+				Name  string `parquet:"name"`
+				Type  string `parquet:"type"`
+				Value string `parquet:"value"`
+			}{Name: fmt.Sprintf("event_%d_name", i), Type: "original", Value: event.Name},
+		)
+	}
+
+	// Filter out empty values
+	ocsf.Observables = []struct {
+		Name  string `parquet:"name"`
+		Type  string `parquet:"type"`
+		Value string `parquet:"value"`
+	}{}
+
+	for _, obs := range observables {
+		if obs.Value != "" {
+			ocsf.Observables = append(ocsf.Observables, obs)
+		}
+	}
 
 	// Metadata
+	ocsf.Metadata.UID = log.ID.UniqueQualifier                                           // Store uniqueQualifier as UID
+	ocsf.Metadata.CorrelationUID = fmt.Sprintf("gw_%s_%s", log.Actor.Email, log.ID.Time) // Unique ID for log deduplication
 	ocsf.Metadata.OriginalTime = log.ID.Time
 	ocsf.Metadata.Processed = time.Now().UnixMilli()
 	ocsf.Metadata.ProductName = "Google Workspace"
 	ocsf.Metadata.Version = "1.0.0"
 
+	// Add original log information to labels
+	labels := []string{}
+	if log.Kind != "" {
+		labels = append(labels, fmt.Sprintf("kind:%s", log.Kind))
+	}
+	if log.ID.ApplicationName != "" {
+		labels = append(labels, fmt.Sprintf("application:%s", log.ID.ApplicationName))
+	}
+	if log.Actor.CallerType != "" {
+		labels = append(labels, fmt.Sprintf("caller_type:%s", log.Actor.CallerType))
+	}
+	if log.OwnerDomain != "" {
+		labels = append(labels, fmt.Sprintf("domain:%s", log.OwnerDomain))
+	}
+	if len(log.Events) > 0 {
+		labels = append(labels, fmt.Sprintf("event_type:%s", log.Events[0].Type))
+		if log.Events[0].Name != "" {
+			labels = append(labels, fmt.Sprintf("event_name:%s", log.Events[0].Name))
+		}
+	}
+	ocsf.Metadata.Labels = labels
+
 	return ocsf, nil
 }
 
-// mapActivityID maps Google Workspace events to OCSF activity_id
-func mapActivityID(appName string, events []struct {
-	Type string `json:"type"`
-	Name string `json:"name"`
+// extractWebResourcesFromEventParameters extracts file/resource information from event parameters
+func extractWebResourcesFromEventParameters(events []struct {
+	Type       string `json:"type"`
+	Name       string `json:"name"`
 	Parameters []struct {
-		Name          string   `json:"name"`
-		Value         string   `json:"value,omitempty"`
-		BoolValue     bool     `json:"boolValue,omitempty"`
-		IntValue      int64    `json:"intValue,omitempty"`
-		MultiStrValue []string `json:"multiStrValue,omitempty"`
-		MultiIntValue []int64  `json:"multiIntValue,omitempty"`
-	} `json:"parameters,omitempty"`
-}) int {
-	if len(events) == 0 {
-		return 99 // Other
-	}
-
-	eventType := events[0].Type
-	eventName := events[0].Name
-
-	// Map based on schema.md
-	switch appName {
-	case "login":
-		switch eventName {
-		case "login_success", "login_failure", "login_challenge":
-			return 2 // Read
-		case "logout":
-			return 99 // Other
-		case "suspicious_login":
-			return 2 // Read
-		}
-	case "drive":
-		switch eventName {
-		case "create":
-			return 1 // Create
-		case "view", "preview", "access_denied":
-			return 2 // Read
-		case "edit", "move", "rename":
-			return 3 // Update
-		case "trash", "delete":
-			return 4 // Delete
-		case "download", "print":
-			return 7 // Export
-		case "upload":
-			return 6 // Import
-		case "share", "unshare":
-			return 8 // Share
-		}
-	case "admin":
-		switch eventType {
-		case "USER_SETTINGS":
-			switch eventName {
-			case "CREATE_USER":
-				return 1 // Create
-			case "DELETE_USER":
-				return 4 // Delete
-			default:
-				return 3 // Update
-			}
-		case "GROUP_SETTINGS":
-			switch eventName {
-			case "CREATE_GROUP":
-				return 1 // Create
-			case "DELETE_GROUP":
-				return 4 // Delete
-			default:
-				return 3 // Update
-			}
-		default:
-			return 3 // Update for most admin operations
-		}
-	case "calendar":
-		switch eventName {
-		case "create_event":
-			return 1 // Create
-		case "view_event":
-			return 2 // Read
-		case "edit_event", "invite_respond":
-			return 3 // Update
-		case "delete_event":
-			return 4 // Delete
-		case "share_calendar":
-			return 8 // Share
-		}
-	}
-
-	return 99 // Other
-}
-
-// mapSeverityID determines severity based on event type
-func mapSeverityID(appName string, events []struct {
-	Type string `json:"type"`
-	Name string `json:"name"`
-	Parameters []struct {
-		Name          string   `json:"name"`
-		Value         string   `json:"value,omitempty"`
-		BoolValue     bool     `json:"boolValue,omitempty"`
-		IntValue      int64    `json:"intValue,omitempty"`
-		MultiStrValue []string `json:"multiStrValue,omitempty"`
-		MultiIntValue []int64  `json:"multiIntValue,omitempty"`
-	} `json:"parameters,omitempty"`
-}) int {
-	if len(events) == 0 {
-		return 1 // Informational
-	}
-
-	eventType := events[0].Type
-	eventName := events[0].Name
-
-	// Based on schema.md severity rules
-	switch appName {
-	case "login":
-		switch eventName {
-		case "login_failure":
-			return 2 // Low
-		case "suspicious_login":
-			return 3 // Medium
-		default:
-			return 1 // Informational
-		}
-	case "drive":
-		switch eventName {
-		case "share":
-			return 2 // Low
-		case "delete":
-			return 2 // Low
-		case "access_denied":
-			return 2 // Low
-		default:
-			return 1 // Informational
-		}
-	case "admin":
-		switch eventType {
-		case "USER_SETTINGS":
-			switch eventName {
-			case "DELETE_USER":
-				return 3 // Medium
-			case "SUSPEND_USER":
-				return 3 // Medium
-			case "CHANGE_USER_PASSWORD":
-				return 3 // Medium
-			default:
-				return 2 // Low
-			}
-		case "SECURITY_SETTINGS":
-			return 4 // High
-		case "DOMAIN_SETTINGS":
-			return 3 // Medium
-		default:
-			return 2 // Low
-		}
-	case "calendar":
-		if eventName == "share_calendar" {
-			return 2 // Low
-		}
-		return 1 // Informational
-	}
-
-	return 1 // Informational
-}
-
-// mapStatusID determines if the operation succeeded or failed
-func mapStatusID(events []struct {
-	Type string `json:"type"`
-	Name string `json:"name"`
-	Parameters []struct {
-		Name          string   `json:"name"`
-		Value         string   `json:"value,omitempty"`
-		BoolValue     bool     `json:"boolValue,omitempty"`
-		IntValue      int64    `json:"intValue,omitempty"`
-		MultiStrValue []string `json:"multiStrValue,omitempty"`
-		MultiIntValue []int64  `json:"multiIntValue,omitempty"`
-	} `json:"parameters,omitempty"`
-}) int {
-	if len(events) == 0 {
-		return 1 // Success
-	}
-
-	eventName := events[0].Name
-	
-	// Check for failure indicators
-	if strings.Contains(eventName, "failure") || 
-	   strings.Contains(eventName, "denied") || 
-	   strings.Contains(eventName, "error") {
-		return 2 // Failure
-	}
-
-	return 1 // Success
-}
-
-// mapUserTypeID determines if user is admin or regular user
-func mapUserTypeID(appName string, events []struct {
-	Type string `json:"type"`
-	Name string `json:"name"`
-	Parameters []struct {
-		Name          string   `json:"name"`
-		Value         string   `json:"value,omitempty"`
-		BoolValue     bool     `json:"boolValue,omitempty"`
-		IntValue      int64    `json:"intValue,omitempty"`
-		MultiStrValue []string `json:"multiStrValue,omitempty"`
-		MultiIntValue []int64  `json:"multiIntValue,omitempty"`
-	} `json:"parameters,omitempty"`
-}) int {
-	if appName == "admin" {
-		return 2 // Admin
-	}
-
-	// Check for admin-related event types
-	if len(events) > 0 {
-		eventType := events[0].Type
-		if strings.Contains(eventType, "_SETTINGS") {
-			return 2 // Admin
-		}
-	}
-
-	return 1 // Regular user
-}
-
-// mapServiceName maps application name to service name
-func mapServiceName(appName string) string {
-	switch appName {
-	case "login":
-		return "Google Identity"
-	case "drive":
-		return "Google Drive API"
-	case "admin":
-		return "Google Admin API"
-	case "calendar":
-		return "Google Calendar API"
-	default:
-		return "Google Workspace API"
-	}
-}
-
-// getResponseCode returns HTTP response code based on status
-func getResponseCode(statusID int) int {
-	if statusID == 1 {
-		return 200 // Success
-	}
-	return 403 // Forbidden
-}
-
-// getResponseMessage returns response message based on status
-func getResponseMessage(statusID int) string {
-	if statusID == 1 {
-		return "Success"
-	}
-	return "Access Denied"
-}
-
-// extractWebResources extracts file/resource information from events
-func extractWebResources(events []struct {
-	Type string `json:"type"`
-	Name string `json:"name"`
-	Parameters []struct {
-		Name          string   `json:"name"`
-		Value         string   `json:"value,omitempty"`
-		BoolValue     bool     `json:"boolValue,omitempty"`
-		IntValue      int64    `json:"intValue,omitempty"`
-		MultiStrValue []string `json:"multiStrValue,omitempty"`
-		MultiIntValue []int64  `json:"multiIntValue,omitempty"`
+		Name       string      `json:"name"`
+		Value      interface{} `json:"value"`
+		IntValue   *int64      `json:"intValue,omitempty"`
+		BoolValue  *bool       `json:"boolValue,omitempty"`
+		MultiValue []string    `json:"multiValue,omitempty"`
 	} `json:"parameters,omitempty"`
 }) []struct {
 	Name      string `parquet:"name,optional"`
@@ -371,68 +206,182 @@ func extractWebResources(events []struct {
 		} `parquet:"data,optional"`
 	}
 
+	// Extract document/resource information from event parameters
 	for _, event := range events {
-		var docID, docTitle, docType, visibility string
-		
 		for _, param := range event.Parameters {
-			switch param.Name {
-			case "doc_id":
-				docID = param.Value
-			case "doc_title":
-				docTitle = param.Value
-			case "doc_type":
-				docType = param.Value
-			case "visibility":
-				visibility = param.Value
-			}
-		}
+			if param.Name == "doc_id" || param.Name == "document_id" || param.Name == "file_id" {
+				if docID, ok := param.Value.(string); ok && docID != "" {
+					webResource := struct {
+						Name      string `parquet:"name,optional"`
+						UID       string `parquet:"uid,optional"`
+						Type      string `parquet:"type,optional"`
+						URLString string `parquet:"url_string,optional"`
+						Data      struct {
+							Classification string `parquet:"classification,optional"`
+						} `parquet:"data,optional"`
+					}{
+						UID:  docID,
+						Type: "document",
+					}
 
-		if docID != "" || docTitle != "" {
-			resource := struct {
-				Name      string `parquet:"name,optional"`
-				UID       string `parquet:"uid,optional"`
-				Type      string `parquet:"type,optional"`
-				URLString string `parquet:"url_string,optional"`
-				Data      struct {
-					Classification string `parquet:"classification,optional"`
-				} `parquet:"data,optional"`
-			}{
-				Name: docTitle,
-				UID:  docID,
-				Type: docType,
-			}
+					// Build URL based on document ID
+					webResource.URLString = fmt.Sprintf("https://docs.google.com/document/d/%s", docID)
+					webResource.Data.Classification = "internal"
 
-			// Build URL based on doc type
-			if docID != "" && docType != "" {
-				switch docType {
-				case "spreadsheet":
-					resource.URLString = fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s", docID)
-				case "document":
-					resource.URLString = fmt.Sprintf("https://docs.google.com/document/d/%s", docID)
-				case "presentation":
-					resource.URLString = fmt.Sprintf("https://docs.google.com/presentation/d/%s", docID)
-				default:
-					resource.URLString = fmt.Sprintf("https://drive.google.com/file/d/%s", docID)
+					resources = append(resources, webResource)
 				}
 			}
-
-			// Set classification based on visibility
-			if visibility != "" {
-				switch visibility {
-				case "private":
-					resource.Data.Classification = "confidential"
-				case "people_with_link":
-					resource.Data.Classification = "internal"
-				case "public":
-					resource.Data.Classification = "public"
-				default:
-					resource.Data.Classification = "internal"
-				}
-			}
-
-			resources = append(resources, resource)
 		}
 	}
 
 	return resources
+}
+
+// mapActivityIDFromEvent maps Google Workspace events to OCSF activity_id
+func mapActivityIDFromEvent(event struct {
+	Type   string `json:"type"`
+	Name   string `json:"name"`
+	Action string `json:"action"`
+}) int {
+	eventType := event.Type
+	eventName := event.Name
+	eventAction := event.Action
+
+	// Use name first, then action, then type for mapping
+	eventToMap := eventName
+	if eventToMap == "" {
+		eventToMap = eventAction
+	}
+	if eventToMap == "" {
+		eventToMap = eventType
+	}
+
+	// Map based on common patterns
+	eventToMapLower := strings.ToLower(eventToMap)
+
+	if strings.Contains(eventToMapLower, "create") || strings.Contains(eventToMapLower, "add") || strings.Contains(eventToMapLower, "new") {
+		return 1 // Create
+	}
+	if strings.Contains(eventToMapLower, "view") || strings.Contains(eventToMapLower, "read") || strings.Contains(eventToMapLower, "access") || strings.Contains(eventToMapLower, "login") {
+		return 2 // Read
+	}
+	if strings.Contains(eventToMapLower, "edit") || strings.Contains(eventToMapLower, "update") || strings.Contains(eventToMapLower, "modify") || strings.Contains(eventToMapLower, "change") {
+		return 3 // Update
+	}
+	if strings.Contains(eventToMapLower, "delete") || strings.Contains(eventToMapLower, "remove") || strings.Contains(eventToMapLower, "trash") {
+		return 4 // Delete
+	}
+	if strings.Contains(eventToMapLower, "download") || strings.Contains(eventToMapLower, "export") || strings.Contains(eventToMapLower, "print") {
+		return 7 // Export
+	}
+	if strings.Contains(eventToMapLower, "upload") || strings.Contains(eventToMapLower, "import") {
+		return 6 // Import
+	}
+	if strings.Contains(eventToMapLower, "share") || strings.Contains(eventToMapLower, "permission") {
+		return 8 // Share
+	}
+
+	return 99 // Other
+}
+
+// mapSeverityIDFromEvent determines severity based on event type
+func mapSeverityIDFromEvent(event struct {
+	Type   string `json:"type"`
+	Name   string `json:"name"`
+	Action string `json:"action"`
+}) int {
+	eventType := event.Type
+	eventName := event.Name
+	eventAction := event.Action
+
+	// Use name first, then action, then type for mapping
+	eventToMap := eventName
+	if eventToMap == "" {
+		eventToMap = eventAction
+	}
+	if eventToMap == "" {
+		eventToMap = eventType
+	}
+
+	eventToMapLower := strings.ToLower(eventToMap)
+
+	// High severity events
+	if strings.Contains(eventToMapLower, "security") || strings.Contains(eventToMapLower, "admin") || strings.Contains(eventToMapLower, "suspend") {
+		return 4 // High
+	}
+
+	// Medium severity events
+	if strings.Contains(eventToMapLower, "delete") || strings.Contains(eventToMapLower, "remove") || strings.Contains(eventToMapLower, "password") {
+		return 3 // Medium
+	}
+
+	// Low severity events
+	if strings.Contains(eventToMapLower, "failure") || strings.Contains(eventToMapLower, "denied") || strings.Contains(eventToMapLower, "share") || strings.Contains(eventToMapLower, "error") {
+		return 2 // Low
+	}
+
+	return 1 // Informational
+}
+
+// mapUserTypeIDFromEvent determines if user is admin or regular user
+func mapUserTypeIDFromEvent(event struct {
+	Type   string `json:"type"`
+	Name   string `json:"name"`
+	Action string `json:"action"`
+}) int {
+	eventType := event.Type
+	eventName := event.Name
+	eventAction := event.Action
+
+	// Check for admin-related patterns
+	eventToCheck := strings.ToLower(eventType + " " + eventName + " " + eventAction)
+
+	if strings.Contains(eventToCheck, "admin") || strings.Contains(eventToCheck, "settings") ||
+		strings.Contains(eventToCheck, "manage") || strings.Contains(eventToCheck, "configure") {
+		return 2 // Admin
+	}
+
+	return 1 // Regular user
+}
+
+// mapServiceNameFromEvent maps event type to service name
+func mapServiceNameFromEvent(event struct {
+	Type   string `json:"type"`
+	Name   string `json:"name"`
+	Action string `json:"action"`
+}) string {
+	eventType := strings.ToLower(event.Type)
+	eventName := strings.ToLower(event.Name)
+	eventAction := strings.ToLower(event.Action)
+
+	if strings.Contains(eventType, "login") || strings.Contains(eventName, "login") || strings.Contains(eventAction, "login") {
+		return "Google Identity"
+	}
+	if strings.Contains(eventType, "drive") || strings.Contains(eventName, "drive") || strings.Contains(eventAction, "drive") {
+		return "Google Drive API"
+	}
+	if strings.Contains(eventType, "admin") || strings.Contains(eventName, "admin") || strings.Contains(eventAction, "admin") {
+		return "Google Admin API"
+	}
+	if strings.Contains(eventType, "calendar") || strings.Contains(eventName, "calendar") || strings.Contains(eventAction, "calendar") {
+		return "Google Calendar API"
+	}
+
+	return "Google Workspace API"
+}
+
+// getResponseCode returns HTTP response code based on status
+func getResponseCode(statusID int) int {
+	if statusID == 1 {
+		return 200 // Success
+	}
+	return 403 // Forbidden
+}
+
+// getResponseMessage returns response message based on status
+func getResponseMessage(statusID int) string {
+	if statusID == 1 {
+		return "Success"
+	}
+	return "Access Denied"
 }

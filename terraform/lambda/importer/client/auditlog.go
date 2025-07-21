@@ -16,52 +16,39 @@ type AuditlogClient struct {
 }
 
 type LogEntry struct {
-	ID        LogID                  `json:"id"`
-	Timestamp string                 `json:"timestamp"`
-	User      LogUser               `json:"user"`
-	Event     LogEvent              `json:"event"`
-	Resource  LogResource           `json:"resource"`
-	Metadata  LogMetadata           `json:"metadata"`
-	Result    LogResult             `json:"result"`
+	Kind        string    `json:"kind"`
+	ID          LogID     `json:"id"`
+	Actor       LogActor  `json:"actor"`
+	OwnerDomain string    `json:"ownerDomain"`
+	IPAddress   string    `json:"ipAddress"`
+	Events      []LogEvent `json:"events"`
 }
 
 type LogID struct {
-	Time string `json:"time"`
+	Time             string `json:"time"`
+	UniqueQualifier  string `json:"uniqueQualifier"`
+	ApplicationName  string `json:"applicationName"`
+	CustomerID       string `json:"customerId"`
 }
 
-type LogUser struct {
-	Email  string `json:"email"`
-	Name   string `json:"name"`
-	Domain string `json:"domain"`
+type LogActor struct {
+	CallerType string `json:"callerType"`
+	Email      string `json:"email"`
+	ProfileID  string `json:"profileId"`
 }
 
 type LogEvent struct {
-	Type   string `json:"type"`
-	Name   string `json:"name"`
-	Action string `json:"action"`
+	Type       string         `json:"type"`
+	Name       string         `json:"name"`
+	Parameters []LogParameter `json:"parameters,omitempty"`
 }
 
-type LogResource struct {
-	Name string `json:"name"`
-	ID   string `json:"id"`
-	Type string `json:"type"`
-}
-
-type LogMetadata struct {
-	IPAddress string      `json:"ip_address"`
-	UserAgent string      `json:"user_agent"`
-	Location  LogLocation `json:"location"`
-}
-
-type LogLocation struct {
-	Country string `json:"country"`
-	Region  string `json:"region"`
-	City    string `json:"city"`
-}
-
-type LogResult struct {
-	Success      bool   `json:"success"`
-	DeniedReason *string `json:"denied_reason"`
+type LogParameter struct {
+	Name         string      `json:"name"`
+	Value        interface{} `json:"value"`
+	IntValue     *int64      `json:"intValue,omitempty"`
+	BoolValue    *bool       `json:"boolValue,omitempty"`
+	MultiValue   []string    `json:"multiValue,omitempty"`
 }
 
 type LogResponse struct {

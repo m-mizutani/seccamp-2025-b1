@@ -1,9 +1,9 @@
 package main
 
-// GoogleWorkspaceLog represents the input log format from Google Workspace audit logs
+// GoogleWorkspaceLog represents the actual structure of Google Workspace audit logs
 type GoogleWorkspaceLog struct {
 	Kind string `json:"kind"`
-	ID   struct {
+	ID struct {
 		Time             string `json:"time"`
 		UniqueQualifier  string `json:"uniqueQualifier"`
 		ApplicationName  string `json:"applicationName"`
@@ -16,16 +16,15 @@ type GoogleWorkspaceLog struct {
 	} `json:"actor"`
 	OwnerDomain string `json:"ownerDomain"`
 	IPAddress   string `json:"ipAddress"`
-	Events      []struct {
+	Events []struct {
 		Type       string `json:"type"`
 		Name       string `json:"name"`
 		Parameters []struct {
-			Name           string   `json:"name"`
-			Value          string   `json:"value,omitempty"`
-			BoolValue      bool     `json:"boolValue,omitempty"`
-			IntValue       int64    `json:"intValue,omitempty"`
-			MultiStrValue  []string `json:"multiStrValue,omitempty"`
-			MultiIntValue  []int64  `json:"multiIntValue,omitempty"`
+			Name         string      `json:"name"`
+			Value        interface{} `json:"value"`
+			IntValue     *int64      `json:"intValue,omitempty"`
+			BoolValue    *bool       `json:"boolValue,omitempty"`
+			MultiValue   []string    `json:"multiValue,omitempty"`
 		} `json:"parameters,omitempty"`
 	} `json:"events"`
 }
@@ -117,6 +116,7 @@ type OCSFWebResourceActivity struct {
 
 	// Metadata
 	Metadata struct {
+		UID            string            `parquet:"uid,optional"`
 		CorrelationUID string            `parquet:"correlation_uid,optional"`
 		Labels         []string          `parquet:"labels,optional,list"`
 		OriginalTime   string            `parquet:"original_time,optional"`

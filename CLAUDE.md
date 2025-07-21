@@ -27,6 +27,15 @@ cd terraform
 zenv aws ...
 ```
 
+### zenv
+
+✅ Valid format
+`zenv terraform`
+
+❌ Invalid format
+`zenv exec terraform`
+`zenv exec -- terraform`
+
 ### Lambda Function Development
 
 #### Build Commands
