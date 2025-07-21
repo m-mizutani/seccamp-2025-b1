@@ -54,4 +54,14 @@ output "alerts_sns_topic_arn" {
 output "athena_results_bucket" {
   description = "S3 bucket for Athena query results"
   value       = aws_s3_bucket.athena_results.bucket
-} 
+}
+
+output "athena_workgroup" {
+  description = "Athena workgroup name"
+  value       = aws_athena_workgroup.main.name
+}
+
+output "athena_database" {
+  description = "Athena database name"
+  value       = aws_glue_catalog_database.main.name
+}

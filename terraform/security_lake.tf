@@ -61,9 +61,7 @@ resource "aws_securitylake_data_lake" "main" {
 
   configuration {
     region = var.aws_region
-    encryption_configuration {
-      kms_key_id = aws_kms_key.security_lake.id
-    }
+    # KMS encryption disabled to avoid complexity
     lifecycle_configuration {
       expiration {
         days = 365
@@ -163,8 +161,8 @@ resource "aws_iam_policy" "security_lake_crawler" {
           "s3:GetBucketLocation"
         ]
         Resource = [
-          "arn:aws:s3:::aws-security-data-lake-${var.aws_region}-${data.aws_caller_identity.current.account_id}",
-          "arn:aws:s3:::aws-security-data-lake-${var.aws_region}-${data.aws_caller_identity.current.account_id}/*"
+          aws_securitylake_data_lake.main.s3_bucket_arn,
+          "${aws_securitylake_data_lake.main.s3_bucket_arn}/*"
         ]
       },
       {
@@ -257,7 +255,7 @@ output "security_lake_data_lake_arn" {
 
 output "security_lake_s3_bucket_name" {
   description = "Name of the Security Lake S3 bucket"
-  value       = "aws-security-data-lake-${var.aws_region}-${data.aws_caller_identity.current.account_id}"
+  value       = replace(aws_securitylake_data_lake.main.s3_bucket_arn, "arn:aws:s3:::", "")
 }
 
 output "security_lake_glue_database_name" {

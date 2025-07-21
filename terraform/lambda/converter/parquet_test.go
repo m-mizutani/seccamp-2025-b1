@@ -130,7 +130,7 @@ func TestGenerateOCSFParquetFile_ValidData(t *testing.T) {
 				Hostname string `parquet:"hostname,optional"`
 				Location struct {
 					Country string `parquet:"country,optional"`
-					Region  string `parquet:"region,optional"`
+					Region  string `parquet:"src_region,optional"`
 					City    string `parquet:"city,optional"`
 				} `parquet:"location,optional"`
 			}{
@@ -183,7 +183,7 @@ func TestGenerateOCSFParquetFile_ValidData(t *testing.T) {
 				Hostname string `parquet:"hostname,optional"`
 				Location struct {
 					Country string `parquet:"country,optional"`
-					Region  string `parquet:"region,optional"`
+					Region  string `parquet:"src_region,optional"`
 					City    string `parquet:"city,optional"`
 				} `parquet:"location,optional"`
 			}{
@@ -288,7 +288,7 @@ func TestGenerateOCSFParquetFile_SchemaValidation(t *testing.T) {
 				Hostname string `parquet:"hostname,optional"`
 				Location struct {
 					Country string `parquet:"country,optional"`
-					Region  string `parquet:"region,optional"`
+					Region  string `parquet:"src_region,optional"`
 					City    string `parquet:"city,optional"`
 				} `parquet:"location,optional"`
 			}{

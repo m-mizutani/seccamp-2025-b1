@@ -99,7 +99,7 @@ type OCSFWebResourceActivity struct {
 		Hostname string `parquet:"hostname,optional"`
 		Location struct {
 			Country string `parquet:"country,optional"`
-			Region  string `parquet:"region,optional"`
+			Region  string `parquet:"src_region,optional"`
 			City    string `parquet:"city,optional"`
 		} `parquet:"location,optional"`
 	} `parquet:"src_endpoint"`
@@ -134,7 +134,7 @@ type OCSFWebResourceActivity struct {
 	} `parquet:"observables,optional,list"`
 
 	// Partitioning fields
-	Region    string `parquet:"region"`      // AWS region
+	Region    string `parquet:"aws_region"`      // AWS region
 	AccountID string `parquet:"account_id"` // AWS account ID
 	EventHour string `parquet:"event_hour"` // YYYY-MM-DD-HH format
 }

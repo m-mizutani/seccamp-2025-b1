@@ -116,7 +116,7 @@ resource "aws_iam_policy" "converter_lambda_s3" {
         Action = [
           "s3:PutObject"
         ]
-        Resource = "arn:aws:s3:::aws-security-data-lake-${var.aws_region}-*/*"
+        Resource = "${aws_securitylake_data_lake.main.s3_bucket_arn}/*"
       }
     ]
   })
@@ -141,7 +141,7 @@ resource "aws_lambda_function" "converter" {
 
   environment {
     variables = {
-      SECURITY_LAKE_BUCKET = "aws-security-data-lake-${var.aws_region}-${data.aws_caller_identity.current.account_id}"
+      SECURITY_LAKE_BUCKET = replace(aws_securitylake_data_lake.main.s3_bucket_arn, "arn:aws:s3:::", "")
       AWS_ACCOUNT_ID       = data.aws_caller_identity.current.account_id
       CUSTOM_LOG_SOURCE    = aws_securitylake_custom_log_source.google_workspace.source_name
     }
@@ -388,4 +388,38 @@ resource "aws_s3_bucket_public_access_block" "athena_results" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_versioning" "athena_results" {
+  bucket = aws_s3_bucket.athena_results.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "athena_results" {
+  bucket = aws_s3_bucket.athena_results.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "athena_results" {
+  bucket = aws_s3_bucket.athena_results.id
+
+  rule {
+    id     = "expire-old-results"
+    status = "Enabled"
+
+    filter {
+      prefix = "results/"
+    }
+
+    expiration {
+      days = 30
+    }
+  }
 }

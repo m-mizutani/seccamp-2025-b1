@@ -53,7 +53,7 @@ func TestHandleSQSEvent_ValidEvent(t *testing.T) {
 		}
 		key := *input.Key
 		// Verify Security Lake custom log source path format
-		return strings.Contains(key, "ext/google-workspace/region=ap-northeast-1/accountId=123456789012/eventDay=") &&
+		return strings.Contains(key, "ext/google-workspace/1.0/region=ap-northeast-1/accountId=123456789012/eventDay=") &&
 			strings.HasSuffix(key, ".gz.parquet")
 	})).Return(&s3.PutObjectOutput{}, nil)
 

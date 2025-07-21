@@ -52,4 +52,4 @@ resource "aws_s3_bucket_notification" "raw_logs" {
   }
 
   depends_on = [aws_sns_topic_policy.raw_logs]
-} 
+}
