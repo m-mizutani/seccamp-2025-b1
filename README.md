@@ -18,7 +18,24 @@ https://www.ipa.go.jp/jinzai/security-camp/2025/camp/zenkoku/program/b.html
 
 - [事前準備](./preparation.md)
 - [講義概略](./outline.md)
-- [講義資料](./docs/)
+
+## 開発環境での使用方法
+
+開発環境でコストを削減するため、一部のアクティブなリソース（Lambda URL、定期実行など）を無効化できます。
+
+```bash
+# terraform.tfvars に以下を設定
+enable_active_resources = false
+
+# または環境変数で設定
+export TF_VAR_enable_active_resources=false
+```
+
+この設定により以下のリソースが無効化されます：
+- auditlog Lambda の URL 公開
+- importer の定期実行（EventBridge）
+
+注意：Security Lake の Glue Crawler は AWS が自動管理するため、Terraform では制御できません。手動で無効化する必要があります。
 
 ## License
 

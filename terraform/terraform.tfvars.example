@@ -1,0 +1,15 @@
+# Example Terraform variables file
+# Copy this file to terraform.tfvars and adjust values as needed
+
+# Base name for all resources
+# basename = "seccamp2025-b1"
+
+# AWS region
+# aws_region = "ap-northeast-1"
+
+# Enable external subscriber for Security Lake
+# enable_external_subscriber = false
+
+# Enable active resources (Lambda URLs, scheduled executions)
+# Set to false for development environments to save costs
+# enable_active_resources = false

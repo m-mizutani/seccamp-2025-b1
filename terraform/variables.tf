@@ -17,3 +17,9 @@ variable "enable_external_subscriber" {
 }
 
 # Team variable removed - using shared resources only
+
+variable "enable_active_resources" {
+  description = "Enable active resources like Lambda URLs and scheduled executions"
+  type        = bool
+  default     = true
+}

@@ -303,6 +303,8 @@ resource "aws_lambda_function" "auditlog" {
 
 # Lambda Function URL for public access
 resource "aws_lambda_function_url" "auditlog" {
+  count = var.enable_active_resources ? 1 : 0
+  
   function_name      = aws_lambda_function.auditlog.function_name
   authorization_type = "NONE"
 
@@ -370,7 +372,7 @@ resource "aws_lambda_function" "importer" {
 
   environment {
     variables = {
-      AUDITLOG_URL   = aws_lambda_function_url.auditlog.function_url
+      AUDITLOG_URL   = var.enable_active_resources && length(aws_lambda_function_url.auditlog) > 0 ? aws_lambda_function_url.auditlog[0].function_url : ""
       S3_BUCKET_NAME = aws_s3_bucket.raw_logs.bucket
     }
   }
@@ -388,6 +390,8 @@ resource "aws_lambda_function" "importer" {
 
 # EventBridge rule for 5-minute interval execution
 resource "aws_cloudwatch_event_rule" "importer_schedule" {
+  count = var.enable_active_resources ? 1 : 0
+  
   name                = "${var.basename}-importer-schedule"
   description         = "Trigger importer Lambda every 5 minutes"
   schedule_expression = "rate(5 minutes)"
@@ -400,18 +404,22 @@ resource "aws_cloudwatch_event_rule" "importer_schedule" {
 
 # EventBridge target
 resource "aws_cloudwatch_event_target" "importer_target" {
-  rule      = aws_cloudwatch_event_rule.importer_schedule.name
+  count = var.enable_active_resources ? 1 : 0
+  
+  rule      = aws_cloudwatch_event_rule.importer_schedule[0].name
   target_id = "${var.basename}-importer-target"
   arn       = aws_lambda_function.importer.arn
 }
 
 # Permission for EventBridge to invoke Lambda
 resource "aws_lambda_permission" "allow_eventbridge" {
+  count = var.enable_active_resources ? 1 : 0
+  
   statement_id  = "AllowExecutionFromEventBridge"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.importer.function_name
   principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.importer_schedule.arn
+  source_arn    = aws_cloudwatch_event_rule.importer_schedule[0].arn
 }
 
 # S3 bucket for Athena query results
