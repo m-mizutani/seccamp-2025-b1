@@ -61,6 +61,16 @@ output "athena_workgroup" {
   value       = aws_athena_workgroup.main.name
 }
 
+output "detector_lambda_role_arn" {
+  description = "Detector Lambda IAM role ARN"
+  value       = aws_iam_role.detector_lambda.arn
+}
+
+output "detector_lambda_role_name" {
+  description = "Detector Lambda IAM role name"
+  value       = aws_iam_role.detector_lambda.name
+}
+
 # output "athena_database" {
 #   description = "Athena database name"
 #   value       = aws_glue_catalog_database.main.name
