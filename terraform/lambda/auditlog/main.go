@@ -5,19 +5,36 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-lambda-go/lambdacontext"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/m-mizutani/seccamp-2025-b1/internal/logcore"
 )
 
 // 埋め込まれたシードファイル（バイナリ圧縮形式）
+// S3アクセスに失敗した場合のフォールバックとして保持
 //
 //go:embed seeds/day_2024-08-12.bin.gz
-var seedData []byte
+var embeddedSeedData []byte
+
+// グローバル変数でキャッシュとS3クライアントを管理
+var (
+	cachedSeedData []byte
+	cacheMutex     sync.RWMutex
+	s3Client       *s3.Client
+	logger         *slog.Logger
+)
 
 // Lambda関数のレスポンス構造
 type LogResponse struct {
@@ -39,11 +56,43 @@ type ErrorResponse struct {
 	Message string `json:"message"`
 }
 
+func init() {
+	// JSON形式のロガーを初期化
+	logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
+	// S3クライアントの初期化
+	logger.Info("Initializing S3 client")
+	cfg, err := config.LoadDefaultConfig(context.Background(),
+		config.WithRegion("ap-northeast-1"),
+	)
+	if err != nil {
+		logger.Error("Failed to load AWS config", "error", err)
+		panic(fmt.Sprintf("failed to load AWS config: %v", err))
+	}
+	s3Client = s3.NewFromConfig(cfg)
+	logger.Info("S3 client initialized successfully")
+}
+
 func main() {
 	lambda.Start(handler)
 }
 
-func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func handler(ctx context.Context, request events.LambdaFunctionURLRequest) (events.LambdaFunctionURLResponse, error) {
+	// Lambda Context から RequestID を取得
+	lc, _ := lambdacontext.FromContext(ctx)
+
+	logger.Info("Received request",
+		"method", request.RequestContext.HTTP.Method,
+		"path", request.RequestContext.HTTP.Path,
+		"queryString", request.QueryStringParameters,
+		"requestId", lc.AwsRequestID,
+		"sourceIP", request.RequestContext.HTTP.SourceIP,
+		"userAgent", request.RequestContext.HTTP.UserAgent,
+	)
+
 	// CORS ヘッダー
 	headers := map[string]string{
 		"Content-Type":                 "application/json",
@@ -53,8 +102,8 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	}
 
 	// OPTIONS リクエスト（CORS プリフライト）
-	if request.HTTPMethod == "OPTIONS" {
-		return events.APIGatewayProxyResponse{
+	if request.RequestContext.HTTP.Method == "OPTIONS" {
+		return events.LambdaFunctionURLResponse{
 			StatusCode: 200,
 			Headers:    headers,
 		}, nil
@@ -67,25 +116,30 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	// startTime (必須)
 	startTimeStr := request.QueryStringParameters["startTime"]
 	if startTimeStr == "" {
+		logger.Warn("Missing required parameter", "parameter", "startTime")
 		return errorResponse(400, "missing required parameter: startTime", headers)
 	}
 	startTime, err = time.Parse(time.RFC3339, startTimeStr)
 	if err != nil {
+		logger.Warn("Invalid startTime format", "startTime", startTimeStr, "error", err)
 		return errorResponse(400, "invalid startTime format, use RFC3339 (2006-01-02T15:04:05Z)", headers)
 	}
 
 	// endTime (必須)
 	endTimeStr := request.QueryStringParameters["endTime"]
 	if endTimeStr == "" {
+		logger.Warn("Missing required parameter", "parameter", "endTime")
 		return errorResponse(400, "missing required parameter: endTime", headers)
 	}
 	endTime, err = time.Parse(time.RFC3339, endTimeStr)
 	if err != nil {
+		logger.Warn("Invalid endTime format", "endTime", endTimeStr, "error", err)
 		return errorResponse(400, "invalid endTime format, use RFC3339 (2006-01-02T15:04:05Z)", headers)
 	}
 
 	// 時刻範囲検証
 	if !endTime.After(startTime) {
+		logger.Warn("Invalid time range", "startTime", startTime, "endTime", endTime)
 		return errorResponse(400, "endTime must be after startTime", headers)
 	}
 
@@ -116,7 +170,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	}
 
 	// ログ生成
-	logs, total, err := generateLogs(startTime, endTime, limit, offset)
+	logs, total, err := generateLogs(ctx, startTime, endTime, limit, offset)
 	if err != nil {
 		return errorResponse(500, fmt.Sprintf("failed to generate logs: %v", err), headers)
 	}
@@ -134,26 +188,49 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	body, err := json.Marshal(response)
 	if err != nil {
+		logger.Error("Failed to marshal response", "error", err)
 		return errorResponse(500, "failed to marshal response", headers)
 	}
 
-	return events.APIGatewayProxyResponse{
+	logger.Info("Request completed successfully",
+		"requestId", request.RequestContext.RequestID,
+		"responseSize", len(body),
+		"totalLogs", response.Metadata.Total,
+	)
+
+	return events.LambdaFunctionURLResponse{
 		StatusCode: 200,
 		Headers:    headers,
 		Body:       string(body),
 	}, nil
 }
 
-func generateLogs(startTime, endTime time.Time, limit, offset int) ([]logcore.GoogleWorkspaceLogEntry, int, error) {
-	// 埋め込みシードデータの読み込み
+func generateLogs(ctx context.Context, startTime, endTime time.Time, limit, offset int) ([]logcore.GoogleWorkspaceLogEntry, int, error) {
+	logger.Info("Starting log generation",
+		"startTime", startTime,
+		"endTime", endTime,
+		"limit", limit,
+		"offset", offset,
+	)
+
+	// Seedデータの取得（S3から、またはキャッシュから）
+	seedData, err := getSeedData(ctx)
+	if err != nil {
+		logger.Error("Failed to get seed data", "error", err)
+		return nil, 0, err
+	}
+
+	// シードデータの読み込み
 	var dayTemplate logcore.DayTemplate
 	if err := dayTemplate.UnmarshalBinaryCompressed(seedData); err != nil {
+		logger.Error("Failed to unmarshal seed data", "error", err)
 		return nil, 0, fmt.Errorf("failed to unmarshal seed data: %w", err)
 	}
 
 	// 設定読み込み
 	config := logcore.DefaultConfig()
 	generator := logcore.NewGenerator(config)
+	logger.Info("Config loaded and generator created")
 
 	// 現在時刻を取得
 	now := time.Now()
@@ -232,17 +309,20 @@ func generateLogs(startTime, endTime time.Time, limit, offset int) ([]logcore.Go
 	}
 
 	total := len(allLogs)
+	logger.Info("Log generation completed", "totalLogs", total)
 
 	// ページネーション
 	start := offset
 	end := offset + limit
 	if start >= total {
+		logger.Info("Offset exceeds total logs", "offset", offset, "total", total)
 		return []logcore.GoogleWorkspaceLogEntry{}, total, nil
 	}
 	if end > total {
 		end = total
 	}
 
+	logger.Info("Returning paginated logs", "start", start, "end", end, "pageSize", end-start)
 	return allLogs[start:end], total, nil
 }
 
@@ -328,7 +408,69 @@ func getExtraLoginLogs(hour int) int {
 	}
 }
 
-func errorResponse(statusCode int, message string, headers map[string]string) (events.APIGatewayProxyResponse, error) {
+// getSeedData はキャッシュまたはS3からseedデータを取得する
+func getSeedData(ctx context.Context) ([]byte, error) {
+	// キャッシュチェック（warm start対応）
+	cacheMutex.RLock()
+	if cachedSeedData != nil {
+		cacheMutex.RUnlock()
+		logger.Info("Returning cached seed data")
+		return cachedSeedData, nil
+	}
+	cacheMutex.RUnlock()
+	logger.Info("Cache miss, downloading from S3")
+
+	// S3からダウンロード
+	data, err := downloadFromS3(ctx)
+	if err != nil {
+		// エラーをそのまま返す（フォールバックなし）
+		logger.Error("Failed to download from S3", "error", err)
+		return nil, fmt.Errorf("failed to download seed data from S3: %w", err)
+	}
+
+	// キャッシュに保存
+	cacheMutex.Lock()
+	cachedSeedData = data
+	cacheMutex.Unlock()
+	logger.Info("Seed data cached", "size", len(data))
+
+	return data, nil
+}
+
+// downloadFromS3 はS3からseedデータをダウンロードする
+func downloadFromS3(ctx context.Context) ([]byte, error) {
+	bucketName := os.Getenv("SEED_BUCKET_NAME")
+	if bucketName == "" {
+		logger.Error("SEED_BUCKET_NAME environment variable is not set")
+		return nil, fmt.Errorf("SEED_BUCKET_NAME environment variable is not set")
+	}
+
+	objectKey := "seeds/large-seed.bin.gz"
+	logger.Info("Downloading from S3", "bucket", bucketName, "key", objectKey)
+
+	result, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(objectKey),
+	})
+	if err != nil {
+		logger.Error("Failed to get object from S3", "error", err, "bucket", bucketName, "key", objectKey)
+		return nil, fmt.Errorf("failed to get object from S3: %w", err)
+	}
+	defer result.Body.Close()
+
+	data, err := io.ReadAll(result.Body)
+	if err != nil {
+		logger.Error("Failed to read object body", "error", err)
+		return nil, fmt.Errorf("failed to read object body: %w", err)
+	}
+
+	logger.Info("Successfully downloaded from S3", "size", len(data))
+	return data, nil
+}
+
+func errorResponse(statusCode int, message string, headers map[string]string) (events.LambdaFunctionURLResponse, error) {
+	logger.Error("Returning error response", "statusCode", statusCode, "message", message)
+
 	errorResp := ErrorResponse{
 		Error:   http.StatusText(statusCode),
 		Message: message,
@@ -336,7 +478,7 @@ func errorResponse(statusCode int, message string, headers map[string]string) (e
 
 	body, _ := json.Marshal(errorResp)
 
-	return events.APIGatewayProxyResponse{
+	return events.LambdaFunctionURLResponse{
 		StatusCode: statusCode,
 		Headers:    headers,
 		Body:       string(body),

@@ -236,6 +236,42 @@ resource "aws_iam_role_policy_attachment" "auditlog_lambda_basic" {
   role       = aws_iam_role.auditlog_lambda.name
 }
 
+# S3 permissions for auditlog Lambda to read seed data
+resource "aws_iam_policy" "auditlog_lambda_s3_seeds" {
+  name        = "${var.basename}-auditlog-lambda-s3-seeds-policy"
+  description = "S3 permissions for auditlog Lambda to access seed data"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:GetObjectVersion"
+        ]
+        Resource = "${aws_s3_bucket.auditlog_seeds.arn}/seeds/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket"
+        ]
+        Resource = aws_s3_bucket.auditlog_seeds.arn
+      }
+    ]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "${var.basename}-auditlog-lambda-s3-seeds-policy"
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "auditlog_lambda_s3_seeds" {
+  policy_arn = aws_iam_policy.auditlog_lambda_s3_seeds.arn
+  role       = aws_iam_role.auditlog_lambda.name
+}
+
 # AuditLog Lambda function
 resource "aws_lambda_function" "auditlog" {
   filename         = data.archive_file.auditlog_lambda_zip.output_path
@@ -246,10 +282,17 @@ resource "aws_lambda_function" "auditlog" {
   runtime          = "provided.al2"
   architectures    = ["arm64"]
   timeout          = 30
-  memory_size      = 256
+  memory_size      = 1024
+
+  environment {
+    variables = {
+      SEED_BUCKET_NAME = aws_s3_bucket.auditlog_seeds.bucket
+    }
+  }
 
   depends_on = [
     aws_iam_role_policy_attachment.auditlog_lambda_basic,
+    aws_iam_role_policy_attachment.auditlog_lambda_s3_seeds,
   ]
 
   tags = merge(local.common_tags, {

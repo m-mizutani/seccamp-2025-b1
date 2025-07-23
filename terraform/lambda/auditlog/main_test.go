@@ -17,8 +17,13 @@ func TestHandlerConsistency(t *testing.T) {
 	startTime := today.Add(10 * time.Hour).Format(time.RFC3339)
 	endTime := today.Add(11 * time.Hour).Format(time.RFC3339)
 
-	request := events.APIGatewayProxyRequest{
-		HTTPMethod: "GET",
+	request := events.LambdaFunctionURLRequest{
+		RequestContext: events.LambdaFunctionURLRequestContext{
+			HTTP: events.LambdaFunctionURLRequestContextHTTPDescription{
+				Method: "GET",
+				Path:   "/",
+			},
+		},
 		QueryStringParameters: map[string]string{
 			"startTime": startTime,
 			"endTime":   endTime,
@@ -29,7 +34,7 @@ func TestHandlerConsistency(t *testing.T) {
 	const iterations = 5
 
 	for i := 0; i < iterations; i++ {
-		response, err := Handler(ctx, request)
+		response, err := handler(ctx, request)
 		if err != nil {
 			t.Fatalf("Handler returned error on iteration %d: %v", i, err)
 		}
@@ -138,12 +143,17 @@ func TestParameterValidation(t *testing.T) {
 				params["offset"] = tc.offset
 			}
 
-			request := events.APIGatewayProxyRequest{
-				HTTPMethod:            "GET",
+			request := events.LambdaFunctionURLRequest{
+				RequestContext: events.LambdaFunctionURLRequestContext{
+					HTTP: events.LambdaFunctionURLRequestContextHTTPDescription{
+						Method: "GET",
+						Path:   "/",
+					},
+				},
 				QueryStringParameters: params,
 			}
 
-			response, err := Handler(ctx, request)
+			response, err := handler(ctx, request)
 			if err != nil {
 				t.Fatalf("Handler returned error: %v", err)
 			}
@@ -162,15 +172,20 @@ func TestFutureLogsFiltering(t *testing.T) {
 	startTime := now.Add(-30 * time.Minute).Format(time.RFC3339)
 	endTime := now.Add(30 * time.Minute).Format(time.RFC3339)
 
-	request := events.APIGatewayProxyRequest{
-		HTTPMethod: "GET",
+	request := events.LambdaFunctionURLRequest{
+		RequestContext: events.LambdaFunctionURLRequestContext{
+			HTTP: events.LambdaFunctionURLRequestContextHTTPDescription{
+				Method: "GET",
+				Path:   "/",
+			},
+		},
 		QueryStringParameters: map[string]string{
 			"startTime": startTime,
 			"endTime":   endTime,
 		},
 	}
 
-	response, err := Handler(ctx, request)
+	response, err := handler(ctx, request)
 	if err != nil {
 		t.Fatalf("Handler returned error: %v", err)
 	}
@@ -218,8 +233,13 @@ func TestJSTTimeDistribution(t *testing.T) {
 			startTime := baseTime.Format(time.RFC3339)
 			endTime := baseTime.Add(5 * time.Minute).Format(time.RFC3339)
 
-			request := events.APIGatewayProxyRequest{
-				HTTPMethod: "GET",
+			request := events.LambdaFunctionURLRequest{
+				RequestContext: events.LambdaFunctionURLRequestContext{
+					HTTP: events.LambdaFunctionURLRequestContextHTTPDescription{
+						Method: "GET",
+						Path:   "/",
+					},
+				},
 				QueryStringParameters: map[string]string{
 					"startTime": startTime,
 					"endTime":   endTime,
@@ -227,7 +247,7 @@ func TestJSTTimeDistribution(t *testing.T) {
 				},
 			}
 
-			response, err := Handler(ctx, request)
+			response, err := handler(ctx, request)
 			if err != nil {
 				t.Fatalf("Handler returned error: %v", err)
 			}

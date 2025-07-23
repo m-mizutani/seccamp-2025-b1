@@ -53,3 +53,25 @@ resource "aws_s3_bucket_notification" "raw_logs" {
 
   depends_on = [aws_sns_topic_policy.raw_logs]
 }
+
+###########################################
+# S3 Bucket for Auditlog Seeds
+###########################################
+
+resource "aws_s3_bucket" "auditlog_seeds" {
+  bucket = "${var.basename}-auditlog-seeds"
+
+  tags = merge(local.common_tags, {
+    Name = "${var.basename}-auditlog-seeds"
+    Type = "seed-storage"
+  })
+}
+
+resource "aws_s3_bucket_public_access_block" "auditlog_seeds" {
+  bucket = aws_s3_bucket.auditlog_seeds.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
