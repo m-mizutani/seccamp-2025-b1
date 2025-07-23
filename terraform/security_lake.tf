@@ -229,4 +229,31 @@ output "custom_log_source_name" {
 output "security_lake_glue_table_name" {
   description = "Name of the Security Lake Glue table for Google Workspace logs"
   value       = "amazon_security_lake_table_${replace(var.aws_region, "-", "_")}_ext_google_workspace_1_0"
+}
+
+###########################################
+# Lake Formation Permissions for Detector Lambda
+###########################################
+
+# Grant permissions to Detector Lambda role for Security Lake database
+resource "aws_lakeformation_permissions" "detector_database" {
+  principal = aws_iam_role.detector_lambda.arn
+
+  permissions = ["DESCRIBE"]
+
+  database {
+    name = "amazon_security_lake_glue_db_${replace(var.aws_region, "-", "_")}"
+  }
+}
+
+# Grant permissions to Detector Lambda role for Security Lake tables
+resource "aws_lakeformation_permissions" "detector_tables" {
+  principal = aws_iam_role.detector_lambda.arn
+
+  permissions = ["SELECT", "DESCRIBE"]
+
+  table {
+    database_name = "amazon_security_lake_glue_db_${replace(var.aws_region, "-", "_")}"
+    wildcard      = true
+  }
 } 

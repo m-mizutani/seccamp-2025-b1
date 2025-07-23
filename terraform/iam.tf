@@ -167,20 +167,68 @@ resource "aws_iam_policy" "detector_lambda_athena" {
           "athena:GetQueryExecution",
           "athena:GetQueryResults",
           "athena:StopQueryExecution",
-          "athena:GetWorkGroup"
+          "athena:GetWorkGroup",
+          "athena:GetDataCatalog",
+          "athena:GetDatabase",
+          "athena:GetTableMetadata",
+          "athena:ListDataCatalogs",
+          "athena:ListDatabases",
+          "athena:ListTableMetadata",
+          "athena:GetQueryResultsStream"
         ]
-        Resource = [
-          "arn:aws:athena:*:*:workgroup/${aws_athena_workgroup.main.name}"
-        ]
+        Resource = "*"
       },
       {
         Effect = "Allow"
         Action = [
           "glue:GetDatabase",
           "glue:GetTable",
-          "glue:GetPartitions"
+          "glue:GetPartitions",
+          "glue:GetDatabases",
+          "glue:GetTables",
+          "glue:GetPartition",
+          "glue:BatchGetPartition"
         ]
         Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:AbortMultipartUpload"
+        ]
+        Resource = "${aws_s3_bucket.athena_results.arn}/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetBucketLocation",
+          "s3:ListBucket"
+        ]
+        Resource = aws_s3_bucket.athena_results.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "lakeformation:GetDataAccess",
+          "lakeformation:GetResourceLFTags",
+          "lakeformation:ListLFTags",
+          "lakeformation:GetLFTag",
+          "lakeformation:SearchTablesByLFTags",
+          "lakeformation:SearchDatabasesByLFTags"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "athena:StartQueryExecution"
+        ]
+        Resource = [
+          "arn:aws:athena:${var.aws_region}:${data.aws_caller_identity.current.account_id}:workgroup/primary",
+          "arn:aws:athena:${var.aws_region}:${data.aws_caller_identity.current.account_id}:workgroup/${aws_athena_workgroup.main.name}"
+        ]
       }
     ]
   })
@@ -207,7 +255,8 @@ resource "aws_iam_policy" "detector_lambda_s3" {
         Effect = "Allow"
         Action = [
           "s3:GetObject",
-          "s3:ListBucket"
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
         ]
         Resource = [
           aws_s3_bucket.athena_results.arn,
@@ -218,7 +267,8 @@ resource "aws_iam_policy" "detector_lambda_s3" {
         Effect = "Allow"
         Action = [
           "s3:GetObject",
-          "s3:ListBucket"
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
         ]
         Resource = [
           aws_securitylake_data_lake.main.s3_bucket_arn,
