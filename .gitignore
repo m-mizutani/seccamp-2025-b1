@@ -11,5 +11,6 @@ tools/loggen/output/
 bootstrap
 terraform/lambda/auditlog_source.zip
 terraform/lambda/auditlog.zip
+terraform/scripts/
 
 tmp
