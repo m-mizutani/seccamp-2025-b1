@@ -2,53 +2,8 @@
 # Amazon Security Lake Configuration
 ###########################################
 
-# KMS Key for Security Lake encryption
-resource "aws_kms_key" "security_lake" {
-  description         = "KMS key for Security Lake encryption"
-  key_usage           = "ENCRYPT_DECRYPT"
-  deletion_window_in_days = 7
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "Enable IAM User Permissions"
-        Effect = "Allow"
-        Principal = {
-          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
-        }
-        Action   = "kms:*"
-        Resource = "*"
-      },
-      {
-        Sid    = "Allow Security Lake service"
-        Effect = "Allow"
-        Principal = {
-          Service = "securitylake.amazonaws.com"
-        }
-        Action = [
-          "kms:Decrypt",
-          "kms:DescribeKey",
-          "kms:Encrypt",
-          "kms:GenerateDataKey",
-          "kms:ReEncrypt*"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-
-  tags = merge(local.common_tags, {
-    Name = "${var.basename}-security-lake-kms"
-    Type = "kms-key"
-  })
-}
-
-# KMS Key Alias
-resource "aws_kms_alias" "security_lake" {
-  name          = "alias/${var.basename}-security-lake"
-  target_key_id = aws_kms_key.security_lake.key_id
-}
+# KMS Key for Security Lake encryption - REMOVED
+# Using S3_MANAGED_KEY instead to avoid complexity
 
 # Data source for existing V2 role
 data "aws_iam_role" "security_lake_meta_store_v2" {
@@ -61,8 +16,9 @@ resource "aws_securitylake_data_lake" "main" {
 
   configuration {
     region = var.aws_region
+    # Use S3 managed encryption instead of KMS to avoid complexity
     encryption_configuration {
-      kms_key_id = aws_kms_key.security_lake.id
+      kms_key_id = "S3_MANAGED_KEY"
     }
     lifecycle_configuration {
       expiration {
@@ -92,19 +48,19 @@ resource "aws_securitylake_data_lake" "main" {
 # Custom Log Source (for application logs)
 ###########################################
 
-# Custom source for application logs
-resource "aws_securitylake_custom_log_source" "app_logs" {
-  source_name    = "test-source"
+# Custom source for Google Workspace logs
+resource "aws_securitylake_custom_log_source" "google_workspace" {
+  source_name    = "google-workspace"
   source_version = "1.0"
 
-  event_classes = ["AUTHENTICATION", "AUTHORIZATION", "NETWORK_ACTIVITY"]
+  event_classes = ["API_ACTIVITY", "FILE_ACTIVITY", "AUTHENTICATION", "AUTHORIZATION"]
 
   configuration {
     crawler_configuration {
       role_arn = aws_iam_role.security_lake_crawler.arn
     }
     provider_identity {
-      external_id = "custom-app-logs-${random_id.external_id.hex}"
+      external_id = "custom-google-workspace-${random_id.external_id.hex}"
       principal   = data.aws_caller_identity.current.account_id
     }
   }
@@ -112,60 +68,16 @@ resource "aws_securitylake_custom_log_source" "app_logs" {
   depends_on = [aws_securitylake_data_lake.main]
 }
 
-# Import and manage the existing Glue Crawler created by Security Lake
-resource "aws_glue_crawler" "security_lake_custom_source" {
-  name          = "test-source"
-  database_name = "amazon_security_lake_glue_db_${replace(var.aws_region, "-", "_")}"
-  role          = aws_iam_role.security_lake_crawler.arn
-
-  catalog_target {
-    database_name = "amazon_security_lake_glue_db_${replace(var.aws_region, "-", "_")}"
-    tables        = ["amazon_security_lake_table_${replace(var.aws_region, "-", "_")}_ext_test_source_1_0"]
-  }
-
-  schedule = "cron(0 0 * * ? *)"  # Daily at midnight UTC
-
-  schema_change_policy {
-    update_behavior = "UPDATE_IN_DATABASE"
-    delete_behavior = "LOG"
-  }
-
-  recrawl_policy {
-    recrawl_behavior = "CRAWL_EVERYTHING"
-  }
-
-  lineage_configuration {
-    crawler_lineage_settings = "DISABLE"
-  }
-
-  configuration = jsonencode({
-    Version = 1.0
-    Grouping = {
-      TableGroupingPolicy = "CombineCompatibleSchemas"
-    }
-  })
-
-  lake_formation_configuration {
-    use_lake_formation_credentials = false
-  }
-
-  depends_on = [
-    aws_securitylake_custom_log_source.app_logs,
-    aws_securitylake_data_lake.main
-  ]
-
-  tags = merge(local.common_tags, {
-    Name = "test-source-glue-crawler"
-    Type = "glue-crawler"
-  })
-}
+# Note: Security Lake automatically creates and manages a Glue Crawler
+# when a custom log source is created. The crawler name will be the same
+# as the source_name (e.g., "google-workspace")
 
 # Random ID for external ID
 resource "random_id" "external_id" {
   byte_length = 8
 }
 
-# IAM Role for Security Lake Crawler
+# IAM Role for Security Lake Custom Log Source Crawler
 resource "aws_iam_role" "security_lake_crawler" {
   name = "${var.basename}-security-lake-crawler-role"
 
@@ -191,10 +103,10 @@ resource "aws_iam_role" "security_lake_crawler" {
   })
 }
 
-# Policy for Security Lake Crawler
+# Policy for Security Lake Crawler to access Security Lake S3 bucket
 resource "aws_iam_policy" "security_lake_crawler" {
   name        = "${var.basename}-security-lake-crawler-policy"
-  description = "Policy for Security Lake Crawler to access S3 and Glue"
+  description = "Policy for Security Lake Crawler to access Security Lake S3 bucket"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -207,8 +119,8 @@ resource "aws_iam_policy" "security_lake_crawler" {
           "s3:GetBucketLocation"
         ]
         Resource = [
-          aws_s3_bucket.raw_logs.arn,
-          "${aws_s3_bucket.raw_logs.arn}/*"
+          aws_securitylake_data_lake.main.s3_bucket_arn,
+          "${aws_securitylake_data_lake.main.s3_bucket_arn}/*"
         ]
       },
       {
@@ -236,11 +148,7 @@ resource "aws_iam_policy" "security_lake_crawler" {
           "lakeformation:RevokePermissions",
           "lakeformation:BatchGrantPermissions",
           "lakeformation:BatchRevokePermissions",
-          "lakeformation:ListPermissions",
-          "lakeformation:GetLFTag",
-          "lakeformation:ListLFTags",
-          "lakeformation:GetResourceLFTags",
-          "lakeformation:ListResourceLFTags"
+          "lakeformation:ListPermissions"
         ]
         Resource = "*"
       }
@@ -272,8 +180,8 @@ resource "aws_securitylake_subscriber" "external_analytics" {
 
   source {
     custom_log_source_resource {
-      source_name    = aws_securitylake_custom_log_source.app_logs.source_name
-      source_version = aws_securitylake_custom_log_source.app_logs.source_version
+      source_name    = aws_securitylake_custom_log_source.google_workspace.source_name
+      source_version = aws_securitylake_custom_log_source.google_workspace.source_version
     }
   }
 
@@ -285,7 +193,7 @@ resource "aws_securitylake_subscriber" "external_analytics" {
   access_type = "LAKEFORMATION"
 
   depends_on = [
-    aws_securitylake_custom_log_source.app_logs
+    aws_securitylake_custom_log_source.google_workspace
   ]
 
   tags = merge(local.common_tags, {
@@ -305,7 +213,7 @@ output "security_lake_data_lake_arn" {
 
 output "security_lake_s3_bucket_name" {
   description = "Name of the Security Lake S3 bucket"
-  value       = "aws-security-data-lake-${var.aws_region}-${data.aws_caller_identity.current.account_id}"
+  value       = replace(aws_securitylake_data_lake.main.s3_bucket_arn, "arn:aws:s3:::", "")
 }
 
 output "security_lake_glue_database_name" {
@@ -315,5 +223,37 @@ output "security_lake_glue_database_name" {
 
 output "custom_log_source_name" {
   description = "Name of the custom log source"
-  value       = aws_securitylake_custom_log_source.app_logs.source_name
+  value       = aws_securitylake_custom_log_source.google_workspace.source_name
+}
+
+output "security_lake_glue_table_name" {
+  description = "Name of the Security Lake Glue table for Google Workspace logs"
+  value       = "amazon_security_lake_table_${replace(var.aws_region, "-", "_")}_ext_google_workspace_1_0"
+}
+
+###########################################
+# Lake Formation Permissions for Detector Lambda
+###########################################
+
+# Grant permissions to Detector Lambda role for Security Lake database
+resource "aws_lakeformation_permissions" "detector_database" {
+  principal = aws_iam_role.detector_lambda.arn
+
+  permissions = ["DESCRIBE"]
+
+  database {
+    name = "amazon_security_lake_glue_db_${replace(var.aws_region, "-", "_")}"
+  }
+}
+
+# Grant permissions to Detector Lambda role for Security Lake tables
+resource "aws_lakeformation_permissions" "detector_tables" {
+  principal = aws_iam_role.detector_lambda.arn
+
+  permissions = ["SELECT", "DESCRIBE"]
+
+  table {
+    database_name = "amazon_security_lake_glue_db_${replace(var.aws_region, "-", "_")}"
+    wildcard      = true
+  }
 } 

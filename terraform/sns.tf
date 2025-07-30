@@ -6,7 +6,8 @@
 resource "aws_sns_topic" "raw_logs" {
   name = "${var.basename}-raw-logs-sns"
 
-  kms_master_key_id = "alias/aws/sns"
+  # KMS encryption disabled to allow S3 to publish messages
+  # kms_master_key_id = "alias/aws/sns"
 
   tags = merge(local.common_tags, {
     Name = "${var.basename}-raw-logs-sns"

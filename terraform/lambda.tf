@@ -11,7 +11,7 @@ resource "null_resource" "build_converter" {
   provisioner "local-exec" {
     command = <<-EOT
       cd ${path.module}/lambda/converter
-      GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap main.go types.go s3_interface.go
+      GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap main.go types.go s3_interface.go convert.go arrow_writer.go
     EOT
     environment = {
       PAGER = ""
@@ -116,7 +116,7 @@ resource "aws_iam_policy" "converter_lambda_s3" {
         Action = [
           "s3:PutObject"
         ]
-        Resource = "arn:aws:s3:::aws-security-data-lake-${var.aws_region}-*/*"
+        Resource = "${aws_securitylake_data_lake.main.s3_bucket_arn}/*"
       }
     ]
   })
@@ -141,8 +141,9 @@ resource "aws_lambda_function" "converter" {
 
   environment {
     variables = {
-      SECURITY_LAKE_BUCKET = "aws-security-data-lake-${var.aws_region}-${data.aws_caller_identity.current.account_id}"
+      SECURITY_LAKE_BUCKET = replace(aws_securitylake_data_lake.main.s3_bucket_arn, "arn:aws:s3:::", "")
       AWS_ACCOUNT_ID       = data.aws_caller_identity.current.account_id
+      CUSTOM_LOG_SOURCE    = aws_securitylake_custom_log_source.google_workspace.source_name
     }
   }
 
@@ -235,6 +236,42 @@ resource "aws_iam_role_policy_attachment" "auditlog_lambda_basic" {
   role       = aws_iam_role.auditlog_lambda.name
 }
 
+# S3 permissions for auditlog Lambda to read seed data
+resource "aws_iam_policy" "auditlog_lambda_s3_seeds" {
+  name        = "${var.basename}-auditlog-lambda-s3-seeds-policy"
+  description = "S3 permissions for auditlog Lambda to access seed data"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:GetObjectVersion"
+        ]
+        Resource = "${aws_s3_bucket.auditlog_seeds.arn}/seeds/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket"
+        ]
+        Resource = aws_s3_bucket.auditlog_seeds.arn
+      }
+    ]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "${var.basename}-auditlog-lambda-s3-seeds-policy"
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "auditlog_lambda_s3_seeds" {
+  policy_arn = aws_iam_policy.auditlog_lambda_s3_seeds.arn
+  role       = aws_iam_role.auditlog_lambda.name
+}
+
 # AuditLog Lambda function
 resource "aws_lambda_function" "auditlog" {
   filename         = data.archive_file.auditlog_lambda_zip.output_path
@@ -245,10 +282,17 @@ resource "aws_lambda_function" "auditlog" {
   runtime          = "provided.al2"
   architectures    = ["arm64"]
   timeout          = 30
-  memory_size      = 256
+  memory_size      = 1024
+
+  environment {
+    variables = {
+      SEED_BUCKET_NAME = aws_s3_bucket.auditlog_seeds.bucket
+    }
+  }
 
   depends_on = [
     aws_iam_role_policy_attachment.auditlog_lambda_basic,
+    aws_iam_role_policy_attachment.auditlog_lambda_s3_seeds,
   ]
 
   tags = merge(local.common_tags, {
@@ -259,6 +303,8 @@ resource "aws_lambda_function" "auditlog" {
 
 # Lambda Function URL for public access
 resource "aws_lambda_function_url" "auditlog" {
+  count = var.enable_active_resources ? 1 : 0
+  
   function_name      = aws_lambda_function.auditlog.function_name
   authorization_type = "NONE"
 
@@ -269,6 +315,111 @@ resource "aws_lambda_function_url" "auditlog" {
     allow_headers     = ["*"]
     max_age          = 86400
   }
+}
+
+###########################################
+# Importer Lambda (Log Importer)
+###########################################
+
+# Build importer Lambda binary
+resource "null_resource" "build_importer" {
+  triggers = {
+    source_hash = data.archive_file.importer_source.output_base64sha256
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      cd ${path.module}/lambda/importer
+      GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap .
+    EOT
+    environment = {
+      PAGER = ""
+    }
+  }
+}
+
+# Archive source files for trigger detection
+data "archive_file" "importer_source" {
+  type        = "zip"
+  source_dir  = "${path.module}/lambda/importer"
+  output_path = "${path.module}/lambda/importer_source.zip"
+  excludes    = ["*.zip", "go.sum", "bootstrap", "*_test.go", "testdata"]
+}
+
+# Archive file for importer Lambda
+data "archive_file" "importer_lambda_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/lambda/importer"
+  output_path = "${path.module}/lambda/importer.zip"
+  excludes    = ["*.zip", "go.sum", "*_test.go", "testdata", "go.mod"]
+
+  depends_on = [null_resource.build_importer]
+}
+
+# Note: IAM resources for importer Lambda are defined in iam.tf
+
+# Importer Lambda function
+resource "aws_lambda_function" "importer" {
+  filename         = data.archive_file.importer_lambda_zip.output_path
+  function_name    = "${var.basename}-importer"
+  role             = aws_iam_role.importer_lambda.arn
+  handler          = "bootstrap"
+  source_code_hash = data.archive_file.importer_lambda_zip.output_base64sha256
+  runtime          = "provided.al2"
+  architectures    = ["arm64"]
+  timeout          = 300
+  memory_size      = 512
+
+  environment {
+    variables = {
+      AUDITLOG_URL   = var.enable_active_resources && length(aws_lambda_function_url.auditlog) > 0 ? aws_lambda_function_url.auditlog[0].function_url : ""
+      S3_BUCKET_NAME = aws_s3_bucket.raw_logs.bucket
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.importer_lambda_basic,
+    aws_iam_role_policy_attachment.importer_lambda_s3,
+  ]
+
+  tags = merge(local.common_tags, {
+    Name = "${var.basename}-importer"
+    Type = "lambda-function"
+  })
+}
+
+# EventBridge rule for 5-minute interval execution
+resource "aws_cloudwatch_event_rule" "importer_schedule" {
+  count = var.enable_active_resources ? 1 : 0
+  
+  name                = "${var.basename}-importer-schedule"
+  description         = "Trigger importer Lambda every 5 minutes"
+  schedule_expression = "rate(5 minutes)"
+
+  tags = merge(local.common_tags, {
+    Name = "${var.basename}-importer-schedule"
+    Type = "eventbridge-rule"
+  })
+}
+
+# EventBridge target
+resource "aws_cloudwatch_event_target" "importer_target" {
+  count = var.enable_active_resources ? 1 : 0
+  
+  rule      = aws_cloudwatch_event_rule.importer_schedule[0].name
+  target_id = "${var.basename}-importer-target"
+  arn       = aws_lambda_function.importer.arn
+}
+
+# Permission for EventBridge to invoke Lambda
+resource "aws_lambda_permission" "allow_eventbridge" {
+  count = var.enable_active_resources ? 1 : 0
+  
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.importer.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.importer_schedule[0].arn
 }
 
 # S3 bucket for Athena query results
@@ -288,4 +439,38 @@ resource "aws_s3_bucket_public_access_block" "athena_results" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_versioning" "athena_results" {
+  bucket = aws_s3_bucket.athena_results.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "athena_results" {
+  bucket = aws_s3_bucket.athena_results.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "athena_results" {
+  bucket = aws_s3_bucket.athena_results.id
+
+  rule {
+    id     = "expire-old-results"
+    status = "Enabled"
+
+    filter {
+      prefix = "results/"
+    }
+
+    expiration {
+      days = 30
+    }
+  }
 }

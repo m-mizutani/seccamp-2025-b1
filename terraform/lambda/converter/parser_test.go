@@ -5,17 +5,16 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestParseJSONL_ValidData(t *testing.T) {
-	jsonlData := `{"id":"log001","timestamp":"2023-12-01T10:00:00Z","user":"alice","action":"login","target":"","success":true,"remote":"192.168.1.100"}
-{"id":"log002","timestamp":"2023-12-01T10:05:00Z","user":"bob","action":"read","target":"document1.txt","success":true,"remote":"192.168.1.101"}`
+func TestParseGoogleWorkspaceJSONL_ValidData(t *testing.T) {
+	jsonlData := `{"kind":"audit#activity","id":{"time":"2024-08-12T10:15:30.123456Z","uniqueQualifier":"358068855354","applicationName":"drive","customerId":"C03az79cb"},"actor":{"callerType":"USER","email":"user@muhai-academy.com","profileId":"114511147312345678901"},"ownerDomain":"muhai-academy.com","ipAddress":"203.0.113.255","events":[{"type":"access","name":"view","parameters":[{"name":"doc_id","value":"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"}]}]}
+{"kind":"audit#activity","id":{"time":"2024-08-12T22:30:15.789Z","uniqueQualifier":"358068855355","applicationName":"drive","customerId":"C03az79cb"},"actor":{"callerType":"USER","email":"admin@muhai-academy.com","profileId":"114511147312345678902"},"ownerDomain":"muhai-academy.com","ipAddress":"198.51.100.42","events":[{"type":"access","name":"download","parameters":[{"name":"doc_id","value":"1A2B3C4D5E6F7G8H9I0J"}]}]}`
 
-	var rawLogs []RawLog
+	var gwLogs []GoogleWorkspaceLog
 	scanner := bufio.NewScanner(strings.NewReader(jsonlData))
 	lineNum := 0
 
@@ -26,37 +25,42 @@ func TestParseJSONL_ValidData(t *testing.T) {
 			continue
 		}
 
-		var rawLog RawLog
-		err := json.Unmarshal([]byte(line), &rawLog)
+		var gwLog GoogleWorkspaceLog
+		err := json.Unmarshal([]byte(line), &gwLog)
 		require.NoError(t, err, "Line %d should parse successfully", lineNum)
-		rawLogs = append(rawLogs, rawLog)
+		gwLogs = append(gwLogs, gwLog)
 	}
 
 	require.NoError(t, scanner.Err())
-	assert.Len(t, rawLogs, 2)
+	assert.Len(t, gwLogs, 2)
 
 	// Verify first log
-	expectedTime1, _ := time.Parse(time.RFC3339, "2023-12-01T10:00:00Z")
-	assert.Equal(t, "log001", rawLogs[0].ID)
-	assert.Equal(t, expectedTime1, rawLogs[0].Timestamp)
-	assert.Equal(t, "alice", rawLogs[0].User)
-	assert.Equal(t, "login", rawLogs[0].Action)
-	assert.Equal(t, "", rawLogs[0].Target)
-	assert.Equal(t, true, rawLogs[0].Success)
-	assert.Equal(t, "192.168.1.100", rawLogs[0].Remote)
+	assert.Equal(t, "audit#activity", gwLogs[0].Kind)
+	assert.Equal(t, "2024-08-12T10:15:30.123456Z", gwLogs[0].ID.Time)
+	assert.Equal(t, "358068855354", gwLogs[0].ID.UniqueQualifier)
+	assert.Equal(t, "drive", gwLogs[0].ID.ApplicationName)
+	assert.Equal(t, "C03az79cb", gwLogs[0].ID.CustomerID)
+	assert.Equal(t, "USER", gwLogs[0].Actor.CallerType)
+	assert.Equal(t, "user@muhai-academy.com", gwLogs[0].Actor.Email)
+	assert.Equal(t, "114511147312345678901", gwLogs[0].Actor.ProfileID)
+	assert.Equal(t, "muhai-academy.com", gwLogs[0].OwnerDomain)
+	assert.Equal(t, "203.0.113.255", gwLogs[0].IPAddress)
+	assert.Equal(t, "access", gwLogs[0].Events[0].Type)
+	assert.Equal(t, "view", gwLogs[0].Events[0].Name)
 
 	// Verify second log
-	expectedTime2, _ := time.Parse(time.RFC3339, "2023-12-01T10:05:00Z")
-	assert.Equal(t, "log002", rawLogs[1].ID)
-	assert.Equal(t, expectedTime2, rawLogs[1].Timestamp)
-	assert.Equal(t, "bob", rawLogs[1].User)
-	assert.Equal(t, "read", rawLogs[1].Action)
-	assert.Equal(t, "document1.txt", rawLogs[1].Target)
-	assert.Equal(t, true, rawLogs[1].Success)
-	assert.Equal(t, "192.168.1.101", rawLogs[1].Remote)
+	assert.Equal(t, "audit#activity", gwLogs[1].Kind)
+	assert.Equal(t, "2024-08-12T22:30:15.789Z", gwLogs[1].ID.Time)
+	assert.Equal(t, "358068855355", gwLogs[1].ID.UniqueQualifier)
+	assert.Equal(t, "drive", gwLogs[1].ID.ApplicationName)
+	assert.Equal(t, "admin@muhai-academy.com", gwLogs[1].Actor.Email)
+	assert.Equal(t, "114511147312345678902", gwLogs[1].Actor.ProfileID)
+	assert.Equal(t, "access", gwLogs[1].Events[0].Type)
+	assert.Equal(t, "download", gwLogs[1].Events[0].Name)
+	assert.Equal(t, "198.51.100.42", gwLogs[1].IPAddress)
 }
 
-func TestParseJSONL_InvalidData(t *testing.T) {
+func TestParseGoogleWorkspaceJSONL_InvalidData(t *testing.T) {
 	testCases := []struct {
 		name     string
 		jsonLine string
@@ -64,30 +68,30 @@ func TestParseJSONL_InvalidData(t *testing.T) {
 	}{
 		{
 			name:     "invalid json",
-			jsonLine: `{"id":"log001","timestamp":invalid}`,
+			jsonLine: `{"id":{"time":"2024-08-12T10:15:30.123456Z"},"user":invalid}`,
 			wantErr:  true,
 		},
 		{
 			name:     "missing required field",
-			jsonLine: `{"timestamp":"2023-12-01T10:00:00Z","user":"alice"}`,
+			jsonLine: `{"actor":{"email":"user@example.com"}}`,
 			wantErr:  false, // json.Unmarshal doesn't fail on missing fields, just sets zero values
 		},
 		{
-			name:     "invalid timestamp format",
-			jsonLine: `{"id":"log001","timestamp":"invalid-time","user":"alice","action":"login","target":"","success":true,"remote":"192.168.1.100"}`,
+			name:     "invalid nested structure",
+			jsonLine: `{"id":"not_an_object","actor":{"email":"user@example.com"}}`,
 			wantErr:  true,
 		},
 		{
-			name:     "invalid boolean",
-			jsonLine: `{"id":"log001","timestamp":"2023-12-01T10:00:00Z","user":"alice","action":"login","target":"","success":"not_bool","remote":"192.168.1.100"}`,
+			name:     "invalid events type",
+			jsonLine: `{"id":{"time":"2024-08-12T10:15:30.123456Z"},"events":"not_an_array"}`,
 			wantErr:  true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var rawLog RawLog
-			err := json.Unmarshal([]byte(tc.jsonLine), &rawLog)
+			var gwLog GoogleWorkspaceLog
+			err := json.Unmarshal([]byte(tc.jsonLine), &gwLog)
 
 			if tc.wantErr {
 				assert.Error(t, err)
@@ -98,14 +102,14 @@ func TestParseJSONL_InvalidData(t *testing.T) {
 	}
 }
 
-func TestParseJSONL_EmptyLines(t *testing.T) {
-	jsonlData := `{"id":"log001","timestamp":"2023-12-01T10:00:00Z","user":"alice","action":"login","target":"","success":true,"remote":"192.168.1.100"}
+func TestParseGoogleWorkspaceJSONL_EmptyLines(t *testing.T) {
+	jsonlData := `{"kind":"audit#activity","id":{"time":"2024-08-12T10:15:30.123456Z","uniqueQualifier":"358068855354","applicationName":"drive","customerId":"C03az79cb"},"actor":{"callerType":"USER","email":"user@muhai-academy.com","profileId":"114511147312345678901"},"ownerDomain":"muhai-academy.com","ipAddress":"203.0.113.255","events":[{"type":"access","name":"view","parameters":[{"name":"doc_id","value":"1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"}]}]}
 
-{"id":"log002","timestamp":"2023-12-01T10:05:00Z","user":"bob","action":"read","target":"document1.txt","success":true,"remote":"192.168.1.101"}
+{"kind":"audit#activity","id":{"time":"2024-08-12T22:30:15.789Z","uniqueQualifier":"358068855355","applicationName":"drive","customerId":"C03az79cb"},"actor":{"callerType":"USER","email":"admin@muhai-academy.com","profileId":"114511147312345678902"},"ownerDomain":"muhai-academy.com","ipAddress":"198.51.100.42","events":[{"type":"access","name":"download","parameters":[{"name":"doc_id","value":"1A2B3C4D5E6F7G8H9I0J"}]}]}
 	
 `
 
-	var rawLogs []RawLog
+	var gwLogs []GoogleWorkspaceLog
 	scanner := bufio.NewScanner(strings.NewReader(jsonlData))
 
 	for scanner.Scan() {
@@ -114,12 +118,12 @@ func TestParseJSONL_EmptyLines(t *testing.T) {
 			continue
 		}
 
-		var rawLog RawLog
-		err := json.Unmarshal([]byte(line), &rawLog)
+		var gwLog GoogleWorkspaceLog
+		err := json.Unmarshal([]byte(line), &gwLog)
 		require.NoError(t, err)
-		rawLogs = append(rawLogs, rawLog)
+		gwLogs = append(gwLogs, gwLog)
 	}
 
 	require.NoError(t, scanner.Err())
-	assert.Len(t, rawLogs, 2, "Should parse 2 logs ignoring empty lines")
+	assert.Len(t, gwLogs, 2, "Should parse 2 logs ignoring empty lines")
 }

@@ -1,13 +1,18 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/m-mizutani/seccamp-2025-b1/internal/logcore"
 	"github.com/m-mizutani/seccamp-2025-b1/tools/loggen/internal/seed"
 	"github.com/urfave/cli/v3"
@@ -25,7 +30,7 @@ func GenerateCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:  "output",
-				Usage: "Output directory",
+				Usage: "Output destination (local directory or s3://bucket/prefix/)",
 				Value: "./output",
 			},
 			&cli.Float64Flag{
@@ -38,22 +43,28 @@ func GenerateCommand() *cli.Command {
 				Usage: "Output format (json, binary, binary-compressed)",
 				Value: "binary-compressed",
 			},
+			&cli.IntFlag{
+				Name:  "multiplier",
+				Usage: "Multiply seed data by this factor",
+				Value: 1,
+			},
 			&cli.BoolFlag{
 				Name:  "dry-run",
 				Usage: "Show what would be generated without writing files",
 			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
-			return generateAction(c)
+			return generateAction(ctx, c)
 		},
 	}
 }
 
-func generateAction(c *cli.Command) error {
+func generateAction(ctx context.Context, c *cli.Command) error {
 	dateStr := c.String("date")
-	outputDir := c.String("output")
+	output := c.String("output")
 	anomalyRatio := c.Float64("anomaly-ratio")
 	format := c.String("format")
+	multiplier := c.Int("multiplier")
 	dryRun := c.Bool("dry-run")
 
 	// 日付パース
@@ -69,6 +80,12 @@ func generateAction(c *cli.Command) error {
 	dayTemplate, err := generator.GenerateDayTemplate(targetDate, anomalyRatio)
 	if err != nil {
 		return fmt.Errorf("failed to generate day template: %w", err)
+	}
+
+	// Multiply seeds if requested
+	if multiplier > 1 {
+		dayTemplate = multiplySeeds(dayTemplate, multiplier)
+		fmt.Printf("Multiplied seeds by %dx\n", multiplier)
 	}
 
 	fmt.Printf("Generated %d log seeds\n", len(dayTemplate.LogSeeds))
@@ -88,8 +105,13 @@ func generateAction(c *cli.Command) error {
 		return nil
 	}
 
-	// 出力ディレクトリ作成
-	seedsDir := filepath.Join(outputDir, "seeds")
+	// Check if output is S3
+	if strings.HasPrefix(output, "s3://") {
+		return saveToS3(ctx, dayTemplate, output, targetDate, format)
+	}
+
+	// Local file output
+	seedsDir := filepath.Join(output, "seeds")
 	if err := os.MkdirAll(seedsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
@@ -166,5 +188,120 @@ func saveAsBinaryCompressed(dayTemplate *logcore.DayTemplate, seedsDir, dateStr 
 
 	fmt.Printf("Seeds written to: %s (size: %.2f MB)\n", outputPath, float64(len(data))/1024/1024)
 
+	return nil
+}
+
+// multiplySeeds multiplies the seed data by the given factor
+func multiplySeeds(template *logcore.DayTemplate, multiplier int) *logcore.DayTemplate {
+	newTemplate := &logcore.DayTemplate{
+		Date:     template.Date,
+		LogSeeds: make([]logcore.LogSeed, 0, len(template.LogSeeds)*multiplier),
+		Metadata: template.Metadata,
+	}
+
+	for i := 0; i < multiplier; i++ {
+		for j, seed := range template.LogSeeds {
+			adjustedSeed := seed
+			// Spread timestamps across the day
+			adjustedSeed.Timestamp = seed.Timestamp + int64(i*8640)
+			// Vary user and resource indices
+			if i%2 == 0 {
+				adjustedSeed.UserIndex = uint8((int(seed.UserIndex) + i) % 256)
+			}
+			if i%3 == 0 {
+				adjustedSeed.ResourceIdx = uint8((int(seed.ResourceIdx) + i) % 256)
+			}
+			// Vary the seed value for different random generation
+			adjustedSeed.Seed = seed.Seed + uint32(i*1000+j)
+			
+			newTemplate.LogSeeds = append(newTemplate.LogSeeds, adjustedSeed)
+		}
+	}
+
+	// Update metadata
+	newTemplate.Metadata.TotalLogs = len(newTemplate.LogSeeds)
+	
+	return newTemplate
+}
+
+// saveToS3 saves the seed data to S3
+func saveToS3(ctx context.Context, dayTemplate *logcore.DayTemplate, s3Path string, targetDate time.Time, format string) error {
+	// Parse S3 path
+	s3Path = strings.TrimPrefix(s3Path, "s3://")
+	parts := strings.SplitN(s3Path, "/", 2)
+	if len(parts) < 1 {
+		return fmt.Errorf("invalid S3 path")
+	}
+	
+	bucket := parts[0]
+	prefix := ""
+	if len(parts) > 1 {
+		prefix = parts[1]
+	}
+
+	// Generate filename
+	dateStr := targetDate.Format("2006-01-02")
+	var filename string
+	var data []byte
+	var err error
+
+	switch format {
+	case "json":
+		filename = fmt.Sprintf("day_%s.json", dateStr)
+		var buf bytes.Buffer
+		encoder := json.NewEncoder(&buf)
+		encoder.SetIndent("", "  ")
+		if err := encoder.Encode(dayTemplate); err != nil {
+			return fmt.Errorf("failed to encode JSON: %w", err)
+		}
+		data = buf.Bytes()
+	case "binary":
+		filename = fmt.Sprintf("day_%s.bin", dateStr)
+		data, err = dayTemplate.MarshalBinary()
+		if err != nil {
+			return fmt.Errorf("failed to marshal binary: %w", err)
+		}
+	case "binary-compressed":
+		filename = fmt.Sprintf("large-seed.bin.gz")  // Fixed name for Lambda
+		data, err = dayTemplate.MarshalBinaryCompressed()
+		if err != nil {
+			return fmt.Errorf("failed to marshal binary compressed: %w", err)
+		}
+	default:
+		return fmt.Errorf("unsupported format: %s", format)
+	}
+
+	// Load AWS config
+	region := os.Getenv("AWS_REGION")
+	if region == "" {
+		region = os.Getenv("AWS_DEFAULT_REGION")
+	}
+	if region == "" {
+		region = "ap-northeast-1" // デフォルトリージョン
+	}
+	
+	cfg, err := config.LoadDefaultConfig(ctx,
+		config.WithRegion(region),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to load AWS config: %w", err)
+	}
+
+	// Create S3 client
+	client := s3.NewFromConfig(cfg)
+
+	// Upload to S3
+	key := filepath.Join(prefix, "seeds", filename)
+	_, err = client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+		Body:   bytes.NewReader(data),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to upload to S3: %w", err)
+	}
+
+	fmt.Printf("Seeds uploaded to: s3://%s/%s (size: %.2f MB)\n", bucket, key, float64(len(data))/1024/1024)
+	
 	return nil
 }

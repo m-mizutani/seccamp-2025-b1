@@ -126,7 +126,41 @@ GOOS=linux GOARCH=amd64 go build -o bootstrap main.go
 zip lambda-deployment.zip bootstrap
 ```
 
-## 埋め込みファイル
+## Seedデータ管理
 
-`seeds/day_2024-08-12.bin.gz` (3.98MB) がバイナリに埋め込まれます。
-約578,000ログエントリが含まれ、展開後のメモリ使用量は約65MBです。
+### 概要
+Lambda関数は埋め込みデータの代わりにS3バケットから大容量のseedデータを読み込みます。これにより、より大きなデータセットの使用と容易な更新が可能になります。
+
+### S3設定
+- バケット: `seccamp2025-b1-auditlog-seeds`
+- キー: `seeds/large-seed.bin.gz`
+- バケット名は環境変数 `SEED_BUCKET_NAME` で設定
+
+### Seedデータの生成とアップロード
+
+`tools/putseed` ユーティリティを使用してseedデータを生成・アップロード：
+
+```bash
+# 10倍のseedデータを生成してアップロード（デフォルト）
+cd tools/putseed
+go run main.go
+
+# カスタム倍率で生成
+go run main.go -multiplier=20
+
+# 既存のseedファイルをベースに使用
+go run main.go -existing=../../terraform/lambda/auditlog/seeds/day_2024-08-12.bin.gz
+
+# アップロードせずに生成のみ
+go run main.go -upload=false
+```
+
+### パフォーマンス最適化
+- 初回ダウンロード後、seedデータはメモリにキャッシュ
+- 後続の呼び出し（warm start）はキャッシュを使用
+- Lambdaコンテナのリサイクル時にキャッシュはクリア
+
+### 必要なIAM権限
+- seedデータバケットへの `s3:GetObject`
+- seedデータバケットへの `s3:ListBucket`
+- 基本的なLambda実行権限
