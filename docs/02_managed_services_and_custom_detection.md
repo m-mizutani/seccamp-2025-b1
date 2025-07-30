@@ -274,17 +274,12 @@ graph TB
 
 マネージドセキュリティサービスでは検知困難だが、カスタム検知で対応可能な実例を無敗塾のケーススタディで解説します。
 
-### 実例1：フェーズ2セキュリティインシデントからの学び
+### (1) フェーズ2セキュリティインシデントからの学び
 
 **ケース：無敗ラーニング拡大期、夜間に管理者が大量の学習データをダウンロード**
 
-```
-GuardDuty判定: ✅ 正常
-→ 正当な認証情報使用（正規の管理者アカウント）
-
-カスタム検知: ⚠️ アラート  
-→ 業務時間外 + 特権アカウント + データ量閾値 = アラート
-```
+- **GuardDuty判定**: ✅ 正常 → 正当な認証情報使用（正規の管理者アカウント）
+- **カスタム検知**: ⚠️ アラート → 業務時間外 + 特権アカウント + データ量閾値 = アラート
 
 **検知ロジックの詳細**
 - **時間条件**: 業務時間外（21:00-8:00）のアクセス
@@ -294,17 +289,12 @@ GuardDuty判定: ✅ 正常
 
 **無敗塾での教訓**: 正当な権限を持つ内部者による不正は、マネージドサービスでは検知が困難
 
-### 実例2：フェーズ3（無敗大学）での学籍データ保護
+### (2) フェーズ3（無敗大学）での学籍データ保護
 
 **ケース：講師アカウントが試験期間外に成績データへ大量アクセス**
 
-```
-Security Hub判定: ✅ 権限は正しく設定
-→ 講師として適切な権限、コンプライアンスチェック通過
-
-カスタム検知: ⚠️ FERPA違反リスク検知
-→ 役職 + 時期 + アクセスパターン = アラート
-```
+- **Security Hub判定**: ✅ 権限は正しく設定 → 講師として適切な権限、コンプライアンスチェック通過
+- **カスタム検知**: ⚠️ FERPA違反リスク検知 → 役職 + 時期 + アクセスパターン = アラート
 
 **検知ロジックの詳細**
 - **役職条件**: 講師アカウントによる成績データアクセス
@@ -312,29 +302,14 @@ Security Hub判定: ✅ 権限は正しく設定
 - **パターン条件**: 複数クラスの成績データを短時間で大量アクセス
 - **法規制考慮**: FERPA（米国教育プライバシー法）の要件
 
-**Google Workspace監査ログでの検知**:
-```sql
-SELECT user_email, file_name, COUNT(*) as access_count
-FROM workspace_audit_logs 
-WHERE event_name = 'access' 
-  AND file_path LIKE '%/grades/%'
-  AND user_role = 'teacher'
-  AND time NOT BETWEEN exam_period_start AND exam_period_end
-GROUP BY user_email, file_name
-HAVING COUNT(*) > 50
-```
+### (3) フェーズ4（無敗リスキリング）でのVPN機器経由攻撃
 
-### 実例3：フェーズ4（無敗リスキリング）でのVPN機器経由攻撃
+**ケース：VPN機器の脆弱性を悪用して内部ネットワークに侵入、内部向けのシステムに侵入してからのVPC内探索**
 
-**ケース：VPN機器の脆弱性を悪用して内部ネットワークに侵入、攻撃者が業務時間内に正常な通信パターンで水平移動を実行**
-
-```
-GuardDuty判定: ✅ 内部通信のため検知せず
-VPN機器: ✅ exploit時のログ記録なし
-
-カスタム検知: ⚠️ 内部偵察・データ収集検知
-→ 未登録MACアドレス + サーバー群への順次接続 + ファイル共有大量アクセス = アラート
-```
+- **GuardDuty判定**: ✅ 内部通信のため検知せず
+- **VPN機器**: ✅ exploit時のログ記録なし
+- **カスタム検知**: ⚠️ 内部偵察・データ収集検知
+  - 未登録MACアドレス + サーバー群への順次接続 + ファイル共有大量アクセス = アラート
 
 **複合的検知ロジック**
 - **ネットワーク異常**: 未登録MACアドレスからの正常ポート通信
@@ -343,294 +318,21 @@ VPN機器: ✅ exploit時のログ記録なし
 - **時系列相関**: 短時間での複数システム探索行動
 
 **統合データソースでの検知**:
-- **VPC Flow Logs**: 内部ネットワークでの異常通信パターン
-- **DNS Logs**: 内部DNSでの大量名前解決クエリ
-- **Google Workspace**: ファイルサーバーへの連続アクセス拒否ログ
 
-```mermaid
-graph TB
-    subgraph "攻撃フロー"
-        ATTACK[攻撃者]
-        ATTACK --> VPN[VPN機器<br/>脆弱性exploit]
-        VPN --> INTERNAL[内部ネットワーク侵入]
-        
-        INTERNAL --> RECON[内部偵察]
-        RECON --> R1[DNS大量クエリ<br/>内部ホスト発見]
-        RECON --> R2[ポートスキャン<br/>サービス発見]
-        RECON --> R3[ファイル共有探索<br/>機密データ発見]
-        
-        R1 --> LATERAL[水平移動]
-        R2 --> LATERAL
-        R3 --> LATERAL
-        
-        LATERAL --> L1[サーバー1接続<br/>認証情報窃取]
-        LATERAL --> L2[サーバー2接続<br/>権限昇格]
-        LATERAL --> L3[ファイルサーバー<br/>データ収集]
-    end
-    
-    subgraph "検知ポイント"
-        subgraph "VPC Flow Logs検知"
-            VPC_DETECT[未登録MACアドレス<br/>からの通信]
-            PATTERN_DETECT[短時間での<br/>複数サーバー接続]
-        end
-        
-        subgraph "DNS Logs検知"
-            DNS_DETECT[内部DNS<br/>大量クエリ]
-            DNS_PATTERN[通常と異なる<br/>名前解決パターン]
-        end
-        
-        subgraph "Google Workspace検知"
-            GWS_DETECT[ファイル共有<br/>連続アクセス拒否]
-            ACCESS_PATTERN[通常業務外<br/>ファイルアクセス]
-        end
-        
-        subgraph "統合検知"
-            CORRELATION[時系列相関分析]
-            RISK_SCORE[リスクスコア<br/>算出・閾値判定]
-            ALERT[高リスクアラート<br/>自動通知]
-        end
-    end
-    
-    subgraph "検知の課題"
-        GD[GuardDuty]
-        GD --> GD_LIMIT[内部通信のため<br/>検知できず]
-        
-        VPN --> VPN_LIMIT[exploit時のログ<br/>記録なし]
-        
-        BUSINESS[業務時間内活動]
-        BUSINESS --> NORMAL[正常な通信パターン<br/>を装う]
-    end
-    
-    R1 -.-> VPC_DETECT
-    R2 -.-> PATTERN_DETECT
-    R3 -.-> GWS_DETECT
-    
-    L1 -.-> DNS_DETECT
-    L2 -.-> DNS_PATTERN
-    L3 -.-> ACCESS_PATTERN
-    
-    VPC_DETECT --> CORRELATION
-    DNS_DETECT --> CORRELATION
-    GWS_DETECT --> CORRELATION
-    PATTERN_DETECT --> CORRELATION
-    DNS_PATTERN --> CORRELATION
-    ACCESS_PATTERN --> CORRELATION
-    
-    CORRELATION --> RISK_SCORE
-    RISK_SCORE --> ALERT
-    
-    style ATTACK fill:#f44336
-    style VPN fill:#ff9800
-    style INTERNAL fill:#ff5722
-    style CORRELATION fill:#c8e6c9
-    style ALERT fill:#ffcdd2
-    style GD_LIMIT fill:#ffcdd2
-    style VPN_LIMIT fill:#ffcdd2
-    style NORMAL fill:#ffcdd2
-```
-*VPN経由侵入 → 内部偵察 → データ収集の一連の流れと、各段階での検知ポイントを図示*
+1. **ネットワーク層の検知（VPC Flow Logs + Route 53 Query Logs）**
+   - 未登録IPアドレスからの内部通信の急増
+   - 短時間での複数サーバーへのポートスキャン的な接続パターン
+   - 内部DNSへの異常な名前解決クエリ（サーバー探索）
+   - 通常の10倍を超えるデータ転送量
 
-## 🏢 無敗塾の成長段階別カスタム検知戦略
+2. **アクセス制御層の検知（CloudTrail + S3 Server Access Logs）**
+   - AssumeRole APIの連続失敗（権限昇格の試行）
+   - 複数のS3バケットへの連続的なListObjects API呼び出し
+   - AccessDeniedエラーの大量発生（探索的アクセス）
+   - 通常アクセスしないバケットへの突発的なアクセス
 
-### 創業期（フェーズ1）：基本的な異常検知（時間外アクセス、地理的異常）
-
-**限られたリソースでの重点実装**
-- **管理者権限の異常使用**: 時間外でのroot権限利用
-- **地理的異常アクセス**: 海外からのサービスアクセス
-- **基本的なデータ保護**: S3バケットの公開設定変更検知
-
-**実装の特徴**
-- シンプルなルールベースの検知
-- 誤検知を避けた確実な脅威のみに絞った対応
-- CloudWatch Alarmsを活用した低コスト実装
-
-### 事業拡大期（フェーズ2）：企業ユーザー向けSSO統合での部門別監視
-
-**企業顧客対応での高度化**
-- **部門別アクセス制御**: 営業部門による技術資料アクセスの監視
-- **SSO連携監視**: 企業ユーザーの異常ログインパターン検知
-- **データ量監視**: 通常の10倍を超える学習データダウンロード
-
-**複合条件の導入**
-- **時間 + 権限 + データ量**: 複数条件を組み合わせた高精度検知
-- **ベースライン学習**: 過去30日のユーザー行動パターン学習
-
-### 市場拡大期（フェーズ3）：法規制対応（GDPR、FERPA）での高度化
-
-**コンプライアンス要求への対応**
-- **FERPA対応**: 学籍データアクセスの厳格な監視
-- **GDPR対応**: EU居住者データの適切な取り扱い監視
-- **法定保持期間**: データ削除の適切性監視
-
-**高度な検知ロジック**
-- **法規制ベースルール**: 教育業界特有の規制要件を組み込み
-- **国際展開対応**: 複数国の法規制を同時満足する設計
-
-### 専門教育期（フェーズ4）：AI/ML活用、サプライチェーン監視
-
-**高度なセキュリティ脅威への対応**
-- **AIモデル保護**: 学習データへの不正アクセス防止
-- **サプライチェーン監視**: 外部講師・パートナー企業の異常行動検知
-- **高度な攻撃検知**: 複数システムを跨ぐ巧妙な攻撃パターン
-
-**機械学習の活用**
-- **異常検知AI**: ユーザー行動の自動パターン学習
-- **相関分析**: 複数データソースからの統合分析
-
-### グローバル展開（フェーズ5）：マルチリージョン統合監視
-
-**国際的なセキュリティ運用**
-- **24時間監視体制**: 時差を活用したグローバルSOC運用
-- **リージョン横断分析**: 複数国でのデータ統合分析
-- **文化的コンテキスト**: 各国の業務慣習を考慮した検知ルール
-
-```mermaid
-graph TB
-    subgraph "無敗塾 成長段階別セキュリティ成熟度"
-        subgraph "フェーズ1: 創業期"
-            P1_SYS[監視システム]
-            P1_SYS --> P1_MON[CloudWatch基本監視]
-            P1_SYS --> P1_LOG[CloudTrail基本ログ]
-            
-            P1_DET[検知能力]
-            P1_DET --> P1_RULE[シンプルルール<br/>• 時間外アクセス<br/>• 地理的異常]
-            
-            P1_TEAM[チーム体制]
-            P1_TEAM --> P1_DEV[開発者兼務<br/>専任者なし]
-        end
-        
-        subgraph "フェーズ2: 事業拡大期"
-            P2_SYS[監視システム]
-            P2_SYS --> P2_MON[CloudWatch詳細監視]
-            P2_SYS --> P2_VPC[VPC Flow Logs]
-            P2_SYS --> P2_XR[X-Ray分散トレース]
-            
-            P2_DET[検知能力]
-            P2_DET --> P2_RULE[複合条件検知<br/>• 時間×権限×データ量<br/>• ベースライン学習]
-            
-            P2_TEAM[チーム体制]
-            P2_TEAM --> P2_SEC[セキュリティ担当2-3名<br/>SREチーム発足]
-        end
-        
-        subgraph "フェーズ3: 市場拡大期"
-            P3_SYS[監視システム]
-            P3_SYS --> P3_LAKE[Security Lake統合]
-            P3_SYS --> P3_GWS[Google Workspace監視]
-            P3_SYS --> P3_OKTA[Okta SSO監視]
-            
-            P3_DET[検知能力]
-            P3_DET --> P3_RULE[法規制対応検知<br/>• GDPR/FERPA準拠<br/>• 高精度相関分析]
-            
-            P3_TEAM[チーム体制]
-            P3_TEAM --> P3_SEC[セキュリティチーム発足<br/>ガバナンス強化]
-        end
-        
-        subgraph "フェーズ4: 専門教育期"
-            P4_SYS[監視システム]
-            P4_SYS --> P4_AI[AI/ML統合監視]
-            P4_SYS --> P4_SC[サプライチェーン監視]
-            P4_SYS --> P4_ADV[高度な脅威検知]
-            
-            P4_DET[検知能力]
-            P4_DET --> P4_RULE[機械学習検知<br/>• 異常パターン自動発見<br/>• 複数システム相関]
-            
-            P4_TEAM[チーム体制]
-            P4_TEAM --> P4_SEC[専門チーム細分化<br/>AI専門者配置]
-        end
-        
-        subgraph "フェーズ5: グローバル展開"
-            P5_SYS[監視システム]
-            P5_SYS --> P5_GLOBAL[マルチリージョン統合]
-            P5_SYS --> P5_SOC[24時間SOC運用]
-            P5_SYS --> P5_TI[脅威インテリジェンス]
-            
-            P5_DET[検知能力]
-            P5_DET --> P5_RULE[国際的高度検知<br/>• 文化的コンテキスト<br/>• リアルタイム対応]
-            
-            P5_TEAM[チーム体制]
-            P5_TEAM --> P5_SEC[CISO配置<br/>国際SOCチーム]
-        end
-    end
-    
-    subgraph "成熟度指標"
-        COMPLEXITY[監視複雑さ]
-        COMPLEXITY --> C1[シンプル]
-        COMPLEXITY --> C2[中程度]
-        COMPLEXITY --> C3[複雑]
-        COMPLEXITY --> C4[非常に複雑]
-        COMPLEXITY --> C5[最高度]
-        
-        ACCURACY[検知精度]
-        ACCURACY --> A1[基本]
-        ACCURACY --> A2[改善]
-        ACCURACY --> A3[高精度]
-        ACCURACY --> A4[AI活用]
-        ACCURACY --> A5[国際水準]
-        
-        COVERAGE[カバレッジ]
-        COVERAGE --> COV1[AWS基本]
-        COVERAGE --> COV2[クラウド＋SaaS]
-        COVERAGE --> COV3[統合監視]
-        COVERAGE --> COV4[AI・SC監視]
-        COVERAGE --> COV5[グローバル統合]
-    end
-    
-    P1_RULE -.-> C1
-    P2_RULE -.-> C2
-    P3_RULE -.-> C3
-    P4_RULE -.-> C4
-    P5_RULE -.-> C5
-    
-    P1_RULE -.-> A1
-    P2_RULE -.-> A2
-    P3_RULE -.-> A3
-    P4_RULE -.-> A4
-    P5_RULE -.-> A5
-    
-    P1_SYS -.-> COV1
-    P2_SYS -.-> COV2
-    P3_SYS -.-> COV3
-    P4_SYS -.-> COV4
-    P5_SYS -.-> COV5
-    
-    style P1_RULE fill:#e3f2fd
-    style P2_RULE fill:#f3e5f5
-    style P3_RULE fill:#fff3e0
-    style P4_RULE fill:#e8f5e8
-    style P5_RULE fill:#fce4ec
-    
-    style C5 fill:#c8e6c9
-    style A5 fill:#c8e6c9
-    style COV5 fill:#c8e6c9
-```
-*フェーズ1-5における監視の複雑さと検知精度の向上を時系列で図示*
-
-## 💡 実装のベストプラクティス
-
-### 段階的実装アプローチ
-
-**Step 1: 高リスク・高確度から開始**
-- 無敗塾フェーズ2のインシデントのような「確実に問題となる」パターンから実装
-- 誤検知の少ないルールで運用経験を積む
-
-**Step 2: ビジネスコンテキストの組み込み**
-- 組織情報（部門・役職・プロジェクト）の活用
-- 業務カレンダー（試験期間、メンテナンス時間）の考慮
-- データ分類（機密度・重要度）の明確化
-
-**Step 3: 継続的改善プロセス**
-- 月次でのルール精度評価
-- 現場からの誤検知報告収集
-- ベースライン・閾値の継続調整
-
-## 🚀 次のセクションへ
-
-**これまでのポイント**
-- **マネージドサービスの限界**: 汎用的脅威のみ、組織固有ルール未対応
-- **プラットフォーム外データの重要性**: Google Workspace、GitHub、物理セキュリティ等
-- **カスタム検知の有効性**: ビジネスコンテキスト + 複合条件による高精度分析
-
-**次は基盤統合の話**
-- なぜ監視基盤を統一する必要があるのか？
-- ログ同士の突合（相関分析）の重要性
-- スキーマ共通化のメリット・デメリット 
+3. **アプリケーション層の検知（ELB Access Logs + RDS Audit Logs）**
+   - 管理画面への総当たり的なアクセスパターン
+   - SQLインジェクションの試行を示すクエリパラメータ
+   - データベースへの異常な全件取得クエリ
+   - 通常と異なるUser-Agentからのアクセス
