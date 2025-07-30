@@ -108,26 +108,21 @@
 
 ### インフラ監視データの活用
 
-#### VPC/ネットワークフローログ
+各種インフラコンポーネントから取得可能なログと、その活用方法を以下に示します。
 
-**通信パターン異常検知**
-- **異常な通信先**: 通常業務で使用されない国・地域への通信
-- **プロトコル異常**: 業務で使用されないポート・プロトコル
-- **ボリューム異常**: 平常時の数倍を超える通信量
+#### 主要なAWSログの取得と活用
 
-#### DNS解決ログ
+**ネットワーク・通信系ログ**
+- **VPC Flow Logs**: 通信パターン異常（異常な通信先、プロトコル、ボリューム）の検知
+- **Route 53 Query Logs**: DNS異常（DGA、DNS Tunneling、C&C通信）の検知
+- **ELB Access Logs**: Web攻撃（SQLインジェクション、XSS、異常User-Agent）の検知
 
-**C&C通信・データ漏洩検知**
-- **DGA（Domain Generation Algorithm）**: ランダム文字列ドメインへのクエリ
-- **DNS Tunneling**: 異常に大きなクエリサイズ
-- **Fast Flux**: 短時間での頻繁なIPアドレス変更
+**ストレージ・データアクセス系ログ**
+- **S3 Server Access Logs**: オブジェクトアクセス監視、不正ダウンロード検知
+- **RDS Audit Logs**: SQLクエリ監視、権限変更、スキーマ変更の追跡
+- **CloudTrail Data Events**: S3/Lambda等のデータプレーンイベント監視
 
-#### ロードバランサーアクセスログ
-
-**Webアプリケーション攻撃検知**
-- **SQLインジェクション**: クエリパラメータ内の危険な文字列
-- **XSS攻撃**: スクリプトタグやJavaScriptコード
-- **異常なUser-Agent**: 自動化ツールの検知
+これらのログはS3バケットやCloudWatch Logsに集約され、Athenaでのクエリ分析やSecurity Lakeでの統合分析に活用されます。
 
 ## プラットフォーム外から収集するべきデータ
 
@@ -145,58 +140,6 @@
 **データアクセスログ**: 個人情報、機密データへのアクセス記録
 - データベース層でのアクセス制御
 - ファイルレベルでのアクセス追跡
-
-```mermaid
-graph TB
-    subgraph "アプリケーション多層ログ収集"
-        subgraph "Presentation Layer"
-            WEB[Webアプリケーション]
-            WEB --> WEB_LOG[Webサーバーログ<br/>• アクセスログ<br/>• エラーログ<br/>• 認証ログ]
-        end
-        
-        subgraph "Application Layer"
-            APP[ビジネスロジック]
-            APP --> APP_LOG[アプリケーションログ<br/>• 学習進捗イベント<br/>• 試験受験ログ<br/>• 権限チェックログ]
-        end
-        
-        subgraph "Database Layer"
-            DB[(データベース)]
-            DB --> DB_LOG[データベースログ<br/>• クエリログ<br/>• アクセス制御ログ<br/>• データ変更ログ]
-        end
-        
-        subgraph "File System Layer"
-            FS[ファイルシステム]
-            FS --> FS_LOG[ファイルアクセスログ<br/>• 教材ダウンロード<br/>• 成績ファイルアクセス<br/>• 権限変更ログ]
-        end
-        
-        subgraph "External Services"
-            OKTA[Okta認証]
-            GWS[Google Workspace]
-            OKTA --> EXT_LOG[外部サービスログ<br/>• SSO認証<br/>• ファイル共有<br/>• 権限プロビジョニング]
-            GWS --> EXT_LOG
-        end
-    end
-    
-    subgraph "ログ統合基盤"
-        WEB_LOG --> COLLECTOR[ログコレクター<br/>Fluentd/Fluent Bit]
-        APP_LOG --> COLLECTOR
-        DB_LOG --> COLLECTOR
-        FS_LOG --> COLLECTOR
-        EXT_LOG --> COLLECTOR
-        
-        COLLECTOR --> S3[(S3<br/>Raw Logs)]
-        S3 --> ETL[ETL処理<br/>正規化・エンリッチ]
-        ETL --> LAKE[(Security Lake<br/>統合データレイク)]
-    end
-    
-    style WEB_LOG fill:#e3f2fd
-    style APP_LOG fill:#f3e5f5
-    style DB_LOG fill:#fff3e0
-    style FS_LOG fill:#e8f5e8
-    style EXT_LOG fill:#fce4ec
-    style LAKE fill:#c8e6c9
-```
-*Webアプリ、データベース、ファイルシステムの各層からのログ収集を図示*
 
 ### 外部連携システムのログ
 
@@ -251,85 +194,79 @@ graph TB
 **入退室管理システム**: 物理アクセス、時間外入室、共連れ検知
 - 🏫 **無敗塾例**: 講師控室アクセス、サーバールーム入退室、学生の施設利用
 
+## AWSにおける取得可能なログと取得の構成
+
 ```mermaid
 graph TB
-    subgraph "統合セキュリティデータ収集"
-        subgraph "クラウドネイティブ"
-            AWS[AWS Services]
-            AWS --> CT[CloudTrail<br/>API監査ログ]
-            AWS --> VPC[VPC Flow Logs<br/>ネットワーク通信]
-            AWS --> GD[GuardDuty<br/>脅威検知]
-            AWS --> CONFIG[Config<br/>設定変更]
+    subgraph "AWS インフラ監視データ収集ポイント"
+        subgraph "ネットワーク層"
+            VPC[VPC]
+            VPC --> VPCFL[VPC Flow Logs]
+            VPCFL --> VPCFL_DATA[取得データ:<br/>• 送信元/宛先IP<br/>• ポート番号<br/>• プロトコル<br/>• パケット数/バイト数<br/>• 通信の許可/拒否]
+            
+            R53[Route 53]
+            R53 --> R53QL[Query Logging]
+            R53QL --> R53_DATA[取得データ:<br/>• クエリされたドメイン名<br/>• クエリタイプ（A, AAAA等）<br/>• クライアントIP<br/>• レスポンスコード]
+            
+            ELB[Elastic Load Balancer]
+            ELB --> ELBAL[Access Logs]
+            ELBAL --> ELB_DATA[取得データ:<br/>• リクエストURL<br/>• HTTPステータス<br/>• User-Agent<br/>• リクエスト処理時間<br/>• バックエンド処理時間]
         end
         
-        subgraph "SaaS・外部サービス"
-            GWS[Google Workspace]
-            OKTA[Okta]
-            GH[GitHub]
-            SLACK[Slack]
+        subgraph "コンピュート層"
+            EC2[EC2 Instances]
+            EC2 --> CWA[CloudWatch Agent]
+            CWA --> CW_DATA[取得データ:<br/>• システムメトリクス<br/>• カスタムメトリクス<br/>• アプリケーションログ]
             
-            GWS --> GWS_LOG[• ファイルアクセス<br/>• 権限変更<br/>• access_denied]
-            OKTA --> OKTA_LOG[• SSO認証<br/>• プロビジョニング<br/>• 権限変更]
-            GH --> GH_LOG[• コード変更<br/>• アクセス制御<br/>• セキュリティアラート]
-            SLACK --> SLACK_LOG[• ファイル送信<br/>• 外部ドメイン通信<br/>• 機密情報共有]
+            LAMBDA[Lambda Functions]
+            LAMBDA --> CWL[CloudWatch Logs]
+            CWL --> LAMBDA_DATA[取得データ:<br/>• 実行ログ<br/>• エラー/例外<br/>• 実行時間<br/>• メモリ使用量]
         end
         
-        subgraph "オンプレミス・ネットワーク"
-            FW[ファイアウォール]
-            PROXY[プロキシサーバー]
-            WIFI[Wi-Fi Controller]
-            VPN[VPN Gateway]
+        subgraph "ストレージ層"
+            S3[S3 Buckets]
+            S3 --> S3AL[Server Access Logs]
+            S3AL --> S3_DATA[取得データ:<br/>• オブジェクトアクセス<br/>• リクエスター情報<br/>• 操作タイプ<br/>• エラーコード]
             
-            FW --> NET_LOG[• 外部通信制御<br/>• 危険サイトアクセス<br/>• 大量通信検知]
-            PROXY --> NET_LOG
-            WIFI --> WIFI_LOG[• デバイス接続<br/>• 認証失敗<br/>• 不正AP検知]
-            VPN --> VPN_LOG[• リモートアクセス<br/>• 地理的異常<br/>• 時間外接続]
-        end
-        
-        subgraph "エンドポイント・物理"
-            MDM[MDM]
-            EDR[EDR]
-            DOOR[入退室管理]
-            
-            MDM --> EP_LOG[• デバイス管理<br/>• アプリインストール<br/>• 位置情報]
-            EDR --> EP_LOG
-            DOOR --> PHYS_LOG[• 物理アクセス<br/>• 時間外入室<br/>• 共連れ検知]
+            RDS[RDS Databases]
+            RDS --> RDSAL[Audit Logs]
+            RDSAL --> RDS_DATA[取得データ:<br/>• SQLクエリ<br/>• 接続/切断<br/>• 権限変更<br/>• スキーマ変更]
         end
     end
     
-    subgraph "統合分析基盤"
-        CT --> COLLECTOR[データ収集<br/>API/Agent/Webhook]
-        VPC --> COLLECTOR
-        GD --> COLLECTOR
-        CONFIG --> COLLECTOR
+    subgraph "ログ収集・保存"
+        VPCFL_DATA --> S3_BUCKET[S3バケット<br/>（ログ保存）]
+        R53_DATA --> S3_BUCKET
+        ELB_DATA --> S3_BUCKET
+        S3_DATA --> S3_BUCKET
         
-        GWS_LOG --> COLLECTOR
-        OKTA_LOG --> COLLECTOR
-        GH_LOG --> COLLECTOR
-        SLACK_LOG --> COLLECTOR
+        CW_DATA --> CWLOGS[CloudWatch Logs]
+        LAMBDA_DATA --> CWLOGS
+        RDS_DATA --> CWLOGS
         
-        NET_LOG --> COLLECTOR
-        WIFI_LOG --> COLLECTOR
-        VPN_LOG --> COLLECTOR
-        
-        EP_LOG --> COLLECTOR
-        PHYS_LOG --> COLLECTOR
-        
-        COLLECTOR --> NORMALIZE[データ正規化<br/>OCSF変換]
-        NORMALIZE --> LAKE[(Security Lake<br/>統合データレイク)]
-        
-        LAKE --> DETECT[カスタム検知<br/>相関分析]
-        DETECT --> ALERT[アラート通知<br/>SOC対応]
+        CWLOGS --> S3_BUCKET
     end
     
-    style AWS fill:#ff9800
-    style GWS fill:#4caf50
-    style FW fill:#2196f3
-    style MDM fill:#9c27b0
+    subgraph "分析・検知"
+        S3_BUCKET --> ATHENA[Athena<br/>（クエリ分析）]
+        S3_BUCKET --> GLUE[Glue<br/>（ETL処理）]
+        GLUE --> LAKE[(Security Lake)]
+        
+        ATHENA --> DETECT[検知ユースケース]
+        LAKE --> DETECT
+        
+        DETECT --> USE1[通信異常検知<br/>• 異常な通信先<br/>• 大量データ転送<br/>• 不審なポート]
+        DETECT --> USE2[DNS異常検知<br/>• DGAドメイン<br/>• DNS Tunneling<br/>• C&C通信]
+        DETECT --> USE3[Web攻撃検知<br/>• SQLインジェクション<br/>• XSS攻撃<br/>• 異常User-Agent]
+    end
+    
+    style VPC fill:#2196f3
+    style R53 fill:#ff9800
+    style ELB fill:#4caf50
+    style EC2 fill:#9c27b0
+    style S3 fill:#ff5722
     style LAKE fill:#c8e6c9
-    style DETECT fill:#ffcdd2
 ```
-*クラウド、SaaS、オンプレミス、物理セキュリティの各データソースを統合した全体像*
 
 ## 🎯 カスタム検知が必要な実例とビジネスケース
 
