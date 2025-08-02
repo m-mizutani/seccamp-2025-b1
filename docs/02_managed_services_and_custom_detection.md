@@ -2,27 +2,22 @@
 
 **時間：8:55-9:20 (25分)**
 
-## 🛡️ クラウドプラットフォーム共通のセキュリティサービス概念
+## 🛡️ クラウドプラットフォーム共通の監視関連セキュリティサービス
 
 クラウドプラットフォームでは、様々なマネージドセキュリティサービスが提供されており、これらを組み合わせることで高度なセキュリティ対策が可能になります。しかし、汎用的なサービスだけでは組織固有の要件に対応できないため、カスタム検知戦略が重要となります。
 
 また、セキュリティに限らず各種ログを収集するための仕組みも存在し、これらは監視だけでなく監査などの目的でも活用できます。
 
-### マネージド脅威検知サービス（GuardDuty, Cloud Security Command Center等）
+### 1. マネージド脅威検知サービス（GuardDuty, Cloud Security Command Center等）
 
-#### 機械学習ベースの脅威検知メカニズム
-
-**検知アプローチ**
-- **統計的分析**: 過去30-90日の通信パターン学習
-- **脅威インテリジェンス**: 既知脅威データベースとの照合
-- **行動ベースライン**: 組織固有の「正常」パターン構築
+📖 **AWS GuardDuty ログ例・出力形式**: [GuardDuty findings samples](https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-retired.html)
 
 #### 検知可能な脅威タイプ
 
 **ネットワーク異常**
 - 暗号通貨マイニング通信
 - ボットネット通信
-- 異常なデータ転送量
+- 異常なデータ転送・リクエスト量
 
 **マルウェア検知**
 - C&Cサーバー通信
@@ -35,11 +30,14 @@
 #### **⚠️ 限界：汎用的な脅威のみ、組織固有ルール・ビジネスロジック依存の異常は検知不可**
 
 **マネージドサービスが検知できない例**
+- 許可されていないリクエストの発生（設定ミス vs 攻撃前探索）
 - 業務時間外の特権アカウント使用（緊急対応 vs 不正使用の判別不可）
 - 部門を超えたデータアクセス（正当な業務 vs 情報窃取の判別不可）
 - 通常業務範囲内での異常パターン（営業データの大量ダウンロード等）
 
-### セキュリティ統合管理サービス（Security Hub, Security Command Center等）
+### 2. セキュリティ統合管理サービス（Security Hub, Security Command Center等）
+
+📖 **AWS Security Hub findings形式**: [ASFF syntax](https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-findings-format-syntax.html)
 
 #### セキュリティ状況の一元管理
 
@@ -57,12 +55,15 @@
 
 #### **⚠️ 限界：定義済みルールベース、カスタムビジネスルール未対応**
 
-**Security Hubが対応できない例**
 - 組織固有のコンプライアンス要件（社内規程、業界固有ルール）
 - ビジネス文脈を考慮した優先度付け（部門別重要度、業務影響度）
 - 複合的な条件による高度な判定（時間+ユーザー+リソース+操作の組み合わせ）
 
-### 監査ログ（CloudTrail, Cloud Logging等）
+また、Security Hub、SCCはチケット管理（担当者の割り当て、詳細なコメント履歴、チケットライフサイクル管理、複数人での協調作業機能）の機能は不十分のため、それらは別途用意する必要があります。
+
+### 3. 監査ログ（CloudTrail, Cloud Logging等）
+
+📖 **AWS CloudTrail ログ例**: [CloudTrail log file examples](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-log-file-examples.html)
 
 #### API監査ログの網羅的収集
 
@@ -71,64 +72,72 @@
 - **データイベント**: S3オブジェクトアクセス、Lambda実行
 - **認証イベント**: ユーザーログイン、権限変更
 
-#### **✅ 活用ポイント：カスタムルール実装の基盤として最適**
+#### ✅ 活用ポイント：カスタムルール実装の基盤として最適
 
 **カスタム検知での活用例**
 - 複合条件での検知（時間+ユーザー+リソース+操作）
 - 組織固有のパターン学習
 - ビジネスコンテキストを考慮した判定
 
-### 構成管理・アセット監視サービス（Config, Cloud Asset Inventory等）
+### 4. 構成管理・アセット監視サービス（Config, Cloud Asset Inventory等）
+
+📖 **AWS Config 設定変更記録例**: [Config configuration items](https://docs.aws.amazon.com/config/latest/developerguide/config-concepts.html#config-items)
 
 #### 設定変更監視
 
-**監視対象**
 - **リソース設定の追跡**: セキュリティグループ、IAMポリシー、ストレージ設定
 - **変更検知**: 設定変更のリアルタイム検知・記録
 - **変更履歴**: いつ・誰が・何を変更したかの追跡
 
-#### コンプライアンス監視
+#### アセットインベントリ：全リソースの可視化・棚卸し
 
-**自動評価項目**
-- **セキュリティ設定基準**: CIS Benchmark等との継続的比較
-- **組織ポリシー**: 社内セキュリティ基準との照合
-- **法規制要件**: GDPR、SOX法等の要件チェック
-
-#### アセットインベントリ
-
-**全リソースの可視化・棚卸し**
 - **リアルタイム一覧**: 全クラウドリソースの現在状況
 - **タグベース管理**: 部門・プロジェクト別の分類
 - **依存関係マッピング**: リソース間の関連性可視化
 
-#### 活用例
+#### ✅ 活用例
 
 **意図しない設定変更検知**
 - 本番環境での危険な設定変更の即座検知
 - 権限エスカレーション検知（管理者権限の追加等）
-- コンプライアンス違反の自動検知
+- コンプライアンス違反の自動検知（セキュリティ統合管理サービスと連携）
 
-### インフラ監視データの活用
+**設定内容の履歴追加**
+- 設定情報は監査ログに残らない場合も多い
+- 監査ログからスナップショットを追跡するのは困難
+
+### 5. インフラ監視データの活用
 
 各種インフラコンポーネントから取得可能なログと、その活用方法を以下に示します。
 
-#### 主要なAWSログの取得と活用
+#### 主要なクラウドインフラログの取得と活用
 
 **ネットワーク・通信系ログ**
-- **VPC Flow Logs**: 通信パターン異常（異常な通信先、プロトコル、ボリューム）の検知
-- **Route 53 Query Logs**: DNS異常（DGA、DNS Tunneling、C&C通信）の検知
-- **ELB Access Logs**: Web攻撃（SQLインジェクション、XSS、異常User-Agent）の検知
+- **ネットワークフローログ** (AWS: VPC Flow Logs, GCP: VPC Flow Logs, Azure: NSG Flow Logs): 通信パターン異常（異常な通信先、プロトコル、ボリューム）の検知
+  - 📖 [VPC Flow Logs record examples](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs-records-examples.html)
+- **DNSログ** (AWS: Route 53, GCP: Cloud DNS, Azure: Azure DNS): DNS異常（DGA、DNS Tunneling、C&C通信）の検知
+  - 📖 [Route 53 query logging](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/query-logs.html)
+- **ロードバランサーログ** (AWS: ELB, GCP: Cloud Load Balancing, Azure: Load Balancer): Web攻撃（SQLインジェクション、XSS、異常User-Agent）の検知
+  - 📖 [ALB access log entries](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-access-logs.html#access-log-entry-syntax)
 
 **ストレージ・データアクセス系ログ**
-- **S3 Server Access Logs**: オブジェクトアクセス監視、不正ダウンロード検知
-- **RDS Audit Logs**: SQLクエリ監視、権限変更、スキーマ変更の追跡
-- **CloudTrail Data Events**: S3/Lambda等のデータプレーンイベント監視
+- **オブジェクトストレージログ** (AWS: S3, GCP: Cloud Storage, Azure: Blob Storage): オブジェクトアクセス監視、不正ダウンロード検知
+  - 📖 [S3 server access log format](https://docs.aws.amazon.com/AmazonS3/latest/userguide/LogFormat.html)
+- **データベース監査ログ** (AWS: RDS, GCP: Cloud SQL, Azure: SQL Database): SQLクエリ監視、権限変更、スキーマ変更の追跡
+  - 📖 [RDS database activity streams](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/DBActivityStreams.html)
+- **APIデータイベント** (AWS: CloudTrail Data Events, GCP: Data Access Logs, Azure: Resource Logs): データプレーンイベント監視
+  - 📖 [CloudTrail data events](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/logging-data-events-with-cloudtrail.html)
 
-これらのログはS3バケットやCloudWatch Logsに集約され、Athenaでのクエリ分析やSecurity Lakeでの統合分析に活用されます。
+これらのログは各クラウドプラットフォームのストレージサービスやログ管理サービスに集約され、クエリ分析ツールやセキュリティ分析基盤での統合分析に活用されます。
 
 ## プラットフォーム外から収集するべきデータ
 
 クラウドネイティブなログだけでは、組織全体のセキュリティ状況を把握することはできません。プラットフォーム外のデータソースからの情報収集が重要です。
+
+📖 **主要な外部サービスのログフォーマット例**:
+- [Google Workspace Activity Events](https://developers.google.com/admin-sdk/reports/reference/rest/v1/activities)
+- [Okta System Log API](https://developer.okta.com/docs/reference/api/system-log/)
+- [GitHub Audit Log](https://docs.github.com/en/organizations/keeping-your-organization-secure/managing-security-settings-for-your-organization/reviewing-the-audit-log-for-your-organization)
 
 ### アプリケーションログ
 
@@ -147,6 +156,7 @@
 
 **ID管理基盤（Okta等）**: SSO認証、プロビジョニング、権限変更
 - 🏫 **無敗塾例**: 企業SSO連携、講師管理システム、成績管理システム
+- 📖 **ログ例**: [Okta Event Types](https://developer.okta.com/docs/reference/api/event-types/)
 
 **決済システム**: 取引履歴、異常課金パターン
 - 不正決済の検知
@@ -161,23 +171,28 @@
 **Google Workspace**: ファイルアクセス、権限変更、共有設定
 - 🏫 **無敗塾例**: 教材作成プロセス、開発ソースコード、学籍データ管理
 - **重要**: アクセス成功だけでなく、`access_denied`ログも監視対象
+- 📖 **ログ例**: [Google Drive Activity API](https://developers.google.com/drive/activity/v2/reference/rest/v2/activity)
 
 **GitHub**: コード変更、アクセス制御、リポジトリ操作
 - ソースコードの不正ダウンロード検知
 - 権限変更の監視
+- 📖 **ログ例**: [GitHub Audit Log Events](https://docs.github.com/en/enterprise-cloud@latest/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/audit-log-events-for-your-enterprise)
 
 **Slack/Teams**: 機密情報の共有、ファイル送信
 - 機密データの誤送信検知
 - 外部ドメインとの通信監視
+- 📖 **ログ例**: [Slack Audit Logs API](https://api.slack.com/admins/audit-logs)
 
 ### エンドポイント・デバイスログ
 
 **MDM（Mobile Device Management）**: デバイス管理、アプリインストール
 - 🏫 **無敗塾例**: 講師・職員の業務端末、試験監督用デバイス
+- 📖 **例**: [Microsoft Intune device compliance](https://learn.microsoft.com/en-us/mem/intune/protect/device-compliance-get-started)
 
 **EDR（Endpoint Detection and Response）**: ファイル操作、プロセス実行
 - 不正なファイル操作の検知
 - マルウェア実行の早期発見
+- 📖 **例**: [CrowdStrike Falcon Data Replicator](https://www.crowdstrike.com/wp-content/uploads/2022/03/crowdstrike-falcon-data-replicator-guide-v3.pdf)
 
 ### オフィスネットワーク・物理セキュリティログ
 
