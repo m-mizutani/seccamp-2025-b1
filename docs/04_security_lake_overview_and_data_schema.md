@@ -51,14 +51,17 @@ AWS Security Lakeは、セキュリティログを一元管理するためのマ
 curl "https://b66hcc5aulnbshfnpuxofpzuxa0busxv.lambda-url.ap-northeast-1.on.aws/?startTime=2025-07-19T00:00:00Z&endTime=2025-07-19T00:05:00Z&offset=0&limit=2" | jq
 ```
 
+**ログのフォーマット**
+[log_format.md](log_format.md)
+
 **Lambda**
-https://145287089436-4jiaei4v.ap-northeast-1.console.aws.amazon.com/lambda/home?region=ap-northeast-1#/functions/seccamp2025-b1-importer?tab=code
+https://ap-northeast-1.console.aws.amazon.com/lambda/home?region=ap-northeast-1#/functions/seccamp2025-b1-importer?tab=code
 
 **Lambdaのコード**
 https://github.com/m-mizutani/seccamp-2025-b1/blob/main/terraform/lambda/importer/main.go
 
 **S3バケット**
-https://145287089436-4jiaei4v.ap-northeast-1.console.aws.amazon.com/s3/buckets/seccamp2025-b1-raw-logs?region=ap-northeast-1&bucketType=general&tab=objects
+https://ap-northeast-1.console.aws.amazon.com/s3/buckets/seccamp2025-b1-raw-logs?region=ap-northeast-1&bucketType=general&tab=objects
 
 ### ✅ 変換フェーズ
 
@@ -67,10 +70,16 @@ https://145287089436-4jiaei4v.ap-northeast-1.console.aws.amazon.com/s3/buckets/s
 - Security Lakeに標準化されたデータを格納
 
 **Lambda**
-https://145287089436-4jiaei4v.ap-northeast-1.console.aws.amazon.com/lambda/home?region=ap-northeast-1#/functions/seccamp2025-b1-converter?tab=code
+https://ap-northeast-1.console.aws.amazon.com/lambda/home?region=ap-northeast-1#/functions/seccamp2025-b1-converter?tab=code
 
 **Lambdaのコード**
 https://github.com/m-mizutani/seccamp-2025-b1/blob/main/terraform/lambda/converter/main.go
+
+**Security LakeのS3バケット**
+https://ap-northeast-1.console.aws.amazon.com/s3/buckets/aws-security-data-lake-ap-northeast-1-bx7uskyh5pxj5xuil96uhdrfc?region=ap-northeast-1&tab=objects&bucketType=general
+
+**Glueの実行結果**
+https://ap-northeast-1.console.aws.amazon.com/glue/home?region=ap-northeast-1#/v2/data-catalog/tables/view/amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0?database=amazon_security_lake_glue_db_ap_northeast_1&catalogId=145287089436&versionId=latest
 
 ### ☑️ 検知フェーズ
 
