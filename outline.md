@@ -170,7 +170,7 @@
 
 ### 9:50-12:00 (130分) - 実習編：AWS Security Lake実装
 
-#### 9:50-10:20 - (#4) Security Lake概要とデータスキーマ理解（30分）
+#### 9:50-10:20 - (#4) Security Lake概要とデータスキーマ理解（20分）
 - **実習の目的**
   - セキュリティ監視のワークフローの一部を構築してみる
   - セキュリティ監視の検知ルールを考え、実装してみる
@@ -193,22 +193,13 @@
 
 #### 10:20-11:00 - (#5) 探索的ログ分析とOCSFスキーマ理解 (40分)
 
-- **AWS コンソールでの実践的データ探索** (25分)
-  - **Athenaコンソールでの基本操作** (10分)
+- **AWS コンソールでの実践的データ探索** (x分)
+  - **Athenaコンソールでの基本操作** (x分)
     - Security Lakeテーブルへのアクセス
     - 簡単なSELECTクエリでデータを見てみる
-    - DESCRIBE TABLEでスキーマ確認
-  - **OCSFスキーマを実データで理解** (15分)
-    - **Google WorkspaceログからOCSFへの変換例**（schema.md参照）
-      ```sql
-      -- 元のGoogle Workspaceログ
-      -- actor.email: "user@muhai-academy.com"
-      -- events[0].name: "download"
-      -- ↓ OCSF形式では
-      -- actor.user.email_addr: "user@muhai-academy.com"
-      -- activity_id: 7 (Export)
-      -- api.operation: "download"
-      ```
+  - **OCSFスキーマを実データで理解** (x分)
+    - `eventday` フィールド（partition）の理解をするためのクエリ
+    - Google WorkspaceログからOCSFへの変換を確認
     - **主要フィールドのマッピング**
       - activity_id: 1=Create, 2=Read, 3=Update, 4=Delete, 7=Export, 8=Share
       - severity_id: 1=通常, 2=低, 3=中, 4=高（管理者操作やセキュリティ設定）
