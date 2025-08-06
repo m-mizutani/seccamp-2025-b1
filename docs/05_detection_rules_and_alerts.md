@@ -10,7 +10,7 @@
 
 - ログインページ https://145287089436.signin.aws.amazon.com/console
 - アカウントID: `145287089436`
-- ログインしたら右上のRegionから `Asia Pacific (Tokyo)` を選択
+- ログインしたら右上のRegionから `Asia Pacific (Tokyo)` を選択 ← 重要
 
 ### 2. Athena コンソールへのアクセス
 
@@ -18,7 +18,9 @@
   - その後、 `Launch query editor` を開く
   - あるいは https://ap-northeast-1.console.aws.amazon.com/athena/home?region=ap-northeast-1#/query-editor
 - 結果出力のS3の設定が必要
-  - `seccamp2025-b1-athena-results` を選択
+  - 「最初のクエリを実行する前に、Amazon S3 でクエリ結果の場所を設定する必要があります。」の右のボタンをクリック
+  - "Browse S3" ボタンで `seccamp2025-b1-athena-results` を選択
+  - "保存" を選択したら "エディタ" にもどる
 
 用意ができたら以下を実行
 
