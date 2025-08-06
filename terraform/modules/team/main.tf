@@ -48,16 +48,43 @@ resource "aws_iam_user_policy" "detector_permissions" {
           "glue:GetPartition",
           "glue:GetPartitions",
           "glue:BatchGetPartition",
-          "s3:GetObject",
-          "s3:ListBucket",
-          "s3:PutObject",
-          "s3:GetBucketLocation",
-          "sns:Publish",
           "logs:CreateLogGroup",
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
         Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
+        ]
+        Resource = [
+          "arn:aws:s3:::seccamp2025-b1-*",
+          "arn:aws:s3:::seccamp2025-b1-*/*",
+          "arn:aws:s3:::aws-security-data-lake-*",
+          "arn:aws:s3:::aws-security-data-lake-*/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject"
+        ]
+        Resource = [
+          "arn:aws:s3:::seccamp2025-b1-athena-results/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sns:Publish"
+        ]
+        Resource = [
+          "arn:aws:sns:*:*:seccamp2025-b1-alerts-sns"
+        ]
       },
       {
         Effect = "Allow"
@@ -86,6 +113,16 @@ resource "aws_iam_user_policy" "detector_permissions" {
           "securitylake:*"
         ]
         Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "iam:CreateAccessKey",
+          "iam:DeleteAccessKey",
+          "iam:ListAccessKeys",
+          "iam:UpdateAccessKey"
+        ]
+        Resource = "arn:aws:iam::*:user/${var.team_id}"
       }
     ]
   })
