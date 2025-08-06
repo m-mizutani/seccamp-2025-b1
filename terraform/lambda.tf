@@ -304,7 +304,7 @@ resource "aws_lambda_function" "auditlog" {
 # Lambda Function URL for public access
 resource "aws_lambda_function_url" "auditlog" {
   count = var.enable_active_resources ? 1 : 0
-  
+
   function_name      = aws_lambda_function.auditlog.function_name
   authorization_type = "NONE"
 
@@ -313,7 +313,7 @@ resource "aws_lambda_function_url" "auditlog" {
     allow_methods     = ["GET"]
     allow_origins     = ["*"]
     allow_headers     = ["*"]
-    max_age          = 86400
+    max_age           = 86400
   }
 }
 
