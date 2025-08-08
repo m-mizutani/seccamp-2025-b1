@@ -65,132 +65,595 @@ ORDER BY time DESC
 LIMIT 100;
 ```
 
+### 3. データ検索の練習
 
-### 3. 異常なアクティビティを探す練習
+#### Step 1: まずログとして見てみる
 
-**大量ダウンロードの検出**
+**1-1. ファイルダウンロードのログ一覧を見てみる**
+
+まずは、今日のファイルダウンロードのログを10件だけ見てみましょう。
+
+**この演習で使う主要フィールド**
+- `time`: イベント発生時刻（UNIXタイムスタンプ、ミリ秒単位、UTC）
+  - 読める形式に変換: `from_unixtime(time/1000)`
+- `eventday`: パーティションキー（YYYYMMDD形式）
+- `actor.user.email_addr`: アクションを実行したユーザー
+- `src_endpoint.ip`: アクセス元IP
+- `web_resources[1].name`: ファイル名
+- `activity_id = 7`: ダウンロード操作を表す
+
+<details>
+<summary>💡 ヒント1: SELECTの基本構造</summary>
+
 ```sql
--- 過去1時間で多数のファイルをダウンロードしたユーザー
 SELECT 
-    actor.user.email_addr as user_email,
-    COUNT(DISTINCT web_resources) as downloaded_files,
-    ARRAY_AGG(DISTINCT web_resources[1].name ORDER BY web_resources[1].name) as file_names,
-    MIN(from_unixtime(time/1000)) as first_download,
-    MAX(from_unixtime(time/1000)) as last_download
-FROM seccamp2025_b1_security_lake.google_workspace
-WHERE activity_id = 7  -- Export/Download
-    AND from_unixtime(time/1000) > current_timestamp - interval '1' hour
-    AND CARDINALITY(web_resources) > 0
-GROUP BY actor.user.email_addr
-HAVING COUNT(DISTINCT web_resources) >= 10
-ORDER BY downloaded_files DESC;
+    カラム1,
+    カラム2
+FROM テーブル名
+WHERE 条件
+ORDER BY 並び替えカラム
+LIMIT 件数;
 ```
 
-**失敗した認証試行の分析**
+</details>
+
+<details>
+<summary>💡 ヒント2: 必要な情報</summary>
+
+- activity_id = 7 がダウンロード/エクスポートを表します
+- 時刻: `from_unixtime(time/1000)` でUnix時刻を読みやすい形式に
+- ユーザー: `actor.user.email_addr`
+- IPアドレス: `src_endpoint.ip`
+- ファイル名: `web_resources[1].name`
+
+</details>
+
+<details>
+<summary>💡 ヒント3: 時刻の区切り方と表示</summary>
+
+時刻データの扱い方の例：
 ```sql
--- ログイン失敗が多いユーザーとその詳細
+-- UTC時刻をそのまま表示
+from_unixtime(time/1000) as event_time_utc,
+
+-- 日本時間に変換して表示
+from_unixtime(time/1000) AT TIME ZONE 'Asia/Tokyo' as event_time_jst,
+
+-- 日付部分のみ取得
+date(from_unixtime(time/1000)) as event_date,
+
+-- 特定の時間範囲でフィルタ（過去1時間）
+WHERE time >= (unix_timestamp() - 3600) * 1000
+```
+
+注意: Security LakeのタイムスタンプはすべてUTC（協定世界時）で記録されています。
+日本時間との差は+9時間です。
+
+</details>
+
+<details>
+<summary>✅ 回答例</summary>
+
+```sql
+SELECT 
+    from_unixtime(time/1000) as event_time,
+    actor.user.email_addr as user_email,
+    src_endpoint.ip as source_ip,
+    web_resources[1].name as file_name
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+    AND activity_id = 7
+ORDER BY time DESC
+LIMIT 10;
+```
+
+</details>
+
+**1-2. 認証のログ一覧を見てみる**
+
+次に、認証（ログイン）関連のログを見てみましょう。
+
+**この演習で使う主要フィールド**
+- `api.service.name = 'Google Identity'`: 認証サービスを特定
+- `status_id`: 認証結果
+  - 1: 成功
+  - 2: 失敗
+- `api.operation`: 実行された操作種別
+
+<details>
+<summary>💡 ヒント1: 認証サービスの特定</summary>
+
+- Google Workspaceの認証は `api.service.name = 'Google Identity'` で絞り込めます
+- WHERE句に条件を追加しましょう
+
+</details>
+
+<details>
+<summary>💡 ヒント2: 表示したい情報</summary>
+
+認証ログで重要な情報：
+- 時刻
+- ユーザーメール
+- アクセス元IP
+- 成功/失敗のステータス
+- 操作タイプ
+
+</details>
+
+<details>
+<summary>✅ 回答例</summary>
+
+```sql
+SELECT 
+    from_unixtime(time/1000) as event_time,
+    actor.user.email_addr as user_email,
+    src_endpoint.ip as source_ip,
+    CASE status_id 
+        WHEN 1 THEN '成功'
+        WHEN 2 THEN '失敗'
+    END as status,
+    api.operation as operation_type
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+    AND api.service.name = 'Google Identity'
+ORDER BY time DESC
+LIMIT 20;
+```
+
+</details>
+
+**1-3. 各アクティビティの詳細を見てみる**
+
+もう少し詳しい情報を含めて見てみましょう。
+
+**この演習で追加で使うフィールド**
+- `src_endpoint.location.country`: アクセス元の国コード
+- `activity_id`: アクティビティの種類
+  - 1: 作成、2: 読み取り、3: 更新、4: 削除、7: ダウンロード、8: 共有
+- `web_resources[1].type`: リソースタイプ
+
+<details>
+<summary>💡 ヒント1: activity_idの意味</summary>
+
+OCSFのactivity_idは操作の種類を表します：
+- 1: 作成
+- 2: 読み取り
+- 3: 更新
+- 4: 削除
+- 7: ダウンロード
+- 8: 共有
+
+</details>
+
+<details>
+<summary>💡 ヒント2: 複数条件のWHERE句</summary>
+
+```sql
+WHERE eventday = date_format(current_date, '%Y%m%d')
+    AND (条件1 OR 条件2)  -- ファイルダウンロードまたは認証ログ
+```
+
+</details>
+
+<details>
+<summary>💡 ヒント3: 配列データへのアクセス</summary>
+
+- `web_resources`は配列形式
+- `web_resources[1].name`で最初の要素の名前を取得
+
+</details>
+
+<details>
+<summary>✅ 回答例</summary>
+
+```sql
+SELECT 
+    from_unixtime(time/1000) as event_time,
+    actor.user.email_addr as user_email,
+    src_endpoint.ip as source_ip,
+    src_endpoint.location.country as country,
+    CASE activity_id
+        WHEN 1 THEN '作成'
+        WHEN 2 THEN '読み取り'
+        WHEN 3 THEN '更新'
+        WHEN 4 THEN '削除'
+        WHEN 7 THEN 'ダウンロード'
+        WHEN 8 THEN '共有'
+    END as activity_type,
+    api.service.name as service,
+    api.operation as operation,
+    web_resources[1].name as resource_name,
+    web_resources[1].type as resource_type
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+    AND (activity_id = 7 OR api.service.name = 'Google Identity')
+ORDER BY time DESC
+LIMIT 30;
+```
+
+</details>
+
+#### Step 2: 統計情報を見てみる
+
+**2-1. ファイルダウンロードの回数が多い人、上位20人を見てみる**
+
+GROUP BYを使って集計してみましょう。
+
+**この演習で使う集計関連の機能**
+- `GROUP BY`: 指定したカラムでグループ化
+- `COUNT(*)`: グループ内のレコード数
+- `COUNT(DISTINCT カラム)`: グループ内のユニークな値の数
+- `MIN()/MAX()`: 最小値/最大値
+
+<details>
+<summary>💡 ヒント1: GROUP BYの基本</summary>
+
+```sql
+SELECT 
+    グループ化するカラム,
+    COUNT(*) as カウント数
+FROM テーブル名
+WHERE 条件
+GROUP BY グループ化するカラム
+ORDER BY カウント数 DESC
+```
+
+</details>
+
+<details>
+<summary>💡 ヒント2: 集計関数</summary>
+
+- `COUNT(*)`: 行数をカウント
+- `COUNT(DISTINCT カラム)`: ユニークな値の数をカウント
+- `MIN()`: 最小値
+- `MAX()`: 最大値
+
+</details>
+
+<details>
+<summary>💡 ヒント3: 必要な情報</summary>
+
+1. ユーザーメールアドレスでグループ化
+2. ダウンロード回数をカウント
+3. ユニークなファイル数をカウント
+4. 最初と最後のダウンロード時刻を取得
+
+</details>
+
+<details>
+<summary>✅ 回答例</summary>
+
+```sql
+SELECT 
+    actor.user.email_addr as user_email,
+    COUNT(*) as download_count,
+    COUNT(DISTINCT web_resources[1].name) as unique_files,
+    MIN(from_unixtime(time/1000)) as first_download,
+    MAX(from_unixtime(time/1000)) as last_download
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+    AND activity_id = 7
+GROUP BY actor.user.email_addr
+ORDER BY download_count DESC
+LIMIT 20;
+```
+
+</details>
+
+**2-2. 認証失敗回数の多いアカウント一覧を見てみる**
+
+**この演習で新たに使う機能**
+- `HAVING`: GROUP BY後の絞り込み条件（WHEREはグループ化前）
+- `COUNT(DISTINCT src_endpoint.ip)`: ユニークなIPアドレス数のカウント
+
+<details>
+<summary>💡 ヒント1: 認証失敗の特定</summary>
+
+- `status_id = 2` が失敗を表します
+- Google Identityサービスで絞り込みます
+
+</details>
+
+<details>
+<summary>💡 ヒント2: HAVING句の使い方</summary>
+
+- HAVINGはGROUP BY後の絞り込み条件
+- `HAVING COUNT(*) >= 3` でグループ化後の件数でフィルタリング
+
+</details>
+
+<details>
+<summary>💡 ヒント3: 集計したい情報</summary>
+
+- 失敗回数
+- 異なるIPアドレスの数（複数場所からのアタックの可能性）
+- 最初と最後の失敗時刻
+
+</details>
+
+<details>
+<summary>✅ 回答例</summary>
+
+```sql
 SELECT 
     actor.user.email_addr as user_email,
     COUNT(*) as failure_count,
-    ARRAY_AGG(DISTINCT src_endpoint.ip) as source_ips,
-    ARRAY_AGG(DISTINCT api.operation) as failed_operations,
+    COUNT(DISTINCT src_endpoint.ip) as unique_ips,
     MIN(from_unixtime(time/1000)) as first_failure,
     MAX(from_unixtime(time/1000)) as last_failure
-FROM seccamp2025_b1_security_lake.google_workspace
-WHERE status_id = 2  -- Failure
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
     AND api.service.name = 'Google Identity'
-    AND from_unixtime(time/1000) > current_timestamp - interval '24' hour
+    AND status_id = 2
 GROUP BY actor.user.email_addr
 HAVING COUNT(*) >= 3
 ORDER BY failure_count DESC;
 ```
 
-**異常な時間帯のアクセス**
+</details>
+
+**2-3. 認証失敗回数の多いIPアドレス一覧を見てみる**
+
+**この演習で新たに使う機能**
+- `ARRAY_AGG(DISTINCT カラム)`: 値を配列として集約
+- 複数カラムでのGROUP BY
+
+<details>
+<summary>💡 ヒント1: IPアドレスでのグループ化</summary>
+
+- IPアドレスと国の両方でグループ化
+- これによりIPアドレスごとの統計が取れます
+
+</details>
+
+<details>
+<summary>💡 ヒント2: ARRAY_AGG関数</summary>
+
+- `ARRAY_AGG(DISTINCT カラム)` で値を配列にまとめます
+- どのユーザーが標的になったか一目でわかります
+
+</details>
+
+<details>
+<summary>💡 ヒント3: 攻撃元の分析</summary>
+
+- 同一IPから複数ユーザーへの認証失敗はブルートフォース攻撃の可能性
+- 国情報も含めて確認
+
+</details>
+
+<details>
+<summary>✅ 回答例</summary>
+
 ```sql
--- 深夜・早朝（22時〜6時）のアクセスを確認
 SELECT 
-    actor.user.email_addr as user_email,
-    from_unixtime(time/1000) AT TIME ZONE 'Asia/Tokyo' as access_time_jst,
-    activity_name,
-    api.operation,
-    web_resources[1].name as accessed_resource,
-    src_endpoint.ip as source_ip
-FROM seccamp2025_b1_security_lake.google_workspace
-WHERE (
-    EXTRACT(HOUR FROM from_unixtime(time/1000) AT TIME ZONE 'Asia/Tokyo') >= 22
-    OR EXTRACT(HOUR FROM from_unixtime(time/1000) AT TIME ZONE 'Asia/Tokyo') < 6
-    )
-    AND from_unixtime(time/1000) > current_timestamp - interval '7' day
-    AND status_id = 1  -- Success
-ORDER BY time DESC
-LIMIT 50;
+    src_endpoint.ip as source_ip,
+    src_endpoint.location.country as country,
+    COUNT(*) as failure_count,
+    COUNT(DISTINCT actor.user.email_addr) as target_users,
+    ARRAY_AGG(DISTINCT actor.user.email_addr) as user_list
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+    AND api.service.name = 'Google Identity'
+    AND status_id = 2
+GROUP BY src_endpoint.ip, src_endpoint.location.country
+HAVING COUNT(*) >= 5
+ORDER BY failure_count DESC
+LIMIT 20;
 ```
 
-## 探索的分析のベストプラクティス
+</details>
 
-### 1. 段階的なアプローチ
-- まず全体像を把握（集計・統計）
-- 異常値や外れ値に注目
-- 詳細なドリルダウン分析
+#### Step 3: 時間帯による傾向を見てみる
 
-### 2. 時系列での変化を追跡
+**3-1. 特定ユーザーの時間帯ごとのAPI呼び出しを見てみる**
+
+まず、アクティブなユーザーを特定しましょう。
+
+**この演習で新たに使う機能**
+- `EXTRACT(HOUR FROM timestamp)`: タイムスタンプから時間を抽出
+- `AT TIME ZONE 'Asia/Tokyo'`: タイムゾーン変換
+
+<details>
+<summary>💡 ヒント1: アクティブユーザーの特定</summary>
+
+- ユーザーごとにイベント数を集計
+- 上位5人を表示
+
+</details>
+
+<details>
+<summary>✅ 回答例</summary>
+
 ```sql
--- 日別のアクティビティ推移
 SELECT 
-    DATE(from_unixtime(time/1000)) as activity_date,
-    COUNT(*) as total_activities,
+    actor.user.email_addr as user_email,
+    COUNT(*) as total_events
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+GROUP BY actor.user.email_addr
+ORDER BY total_events DESC
+LIMIT 5;
+```
+
+</details>
+
+上記で見つかったユーザーのメールアドレスを使って、時間帯別の分析をしてみましょう。
+
+<details>
+<summary>💡 ヒント1: 時間の抽出</summary>
+
+- `EXTRACT(HOUR FROM ...)` で時間を取り出します
+- `AT TIME ZONE 'Asia/Tokyo'` で日本時間に変換
+
+</details>
+
+<details>
+<summary>💡 ヒント2: 特定ユーザーで絞り込み</summary>
+
+- WHERE句に `actor.user.email_addr = 'ユーザーメール'` を追加
+- 実際のユーザーメールアドレスに置き換えてください
+
+</details>
+
+<details>
+<summary>✅ 回答例</summary>
+
+```sql
+SELECT 
+    EXTRACT(HOUR FROM from_unixtime(time/1000) AT TIME ZONE 'Asia/Tokyo') as hour_jst,
+    COUNT(*) as event_count,
+    COUNT(DISTINCT api.operation) as unique_operations,
+    ARRAY_AGG(DISTINCT api.operation) as operations_list
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+    AND actor.user.email_addr = 'user@example.com'  -- 実際のユーザーに変更
+GROUP BY EXTRACT(HOUR FROM from_unixtime(time/1000) AT TIME ZONE 'Asia/Tokyo')
+ORDER BY hour_jst;
+```
+
+</details>
+
+**3-2. 全体的な時間帯別の傾向を見る**
+
+**この演習で新たに使う機能**
+- `COUNT(CASE WHEN 条件 THEN 1 END)`: 条件付きカウント
+
+<details>
+<summary>💡 ヒント1: CASE文を使った集計</summary>
+
+```sql
+COUNT(CASE WHEN 条件 THEN 1 END)
+```
+この方法で、特定の条件に一致するレコードだけをカウントできます。
+
+</details>
+
+<details>
+<summary>💡 ヒント2: 集計したい情報</summary>
+
+- 総イベント数
+- アクティブユーザー数
+- ダウンロード数
+- 失敗数
+
+</details>
+
+<details>
+<summary>✅ 回答例</summary>
+
+```sql
+SELECT 
+    EXTRACT(HOUR FROM from_unixtime(time/1000) AT TIME ZONE 'Asia/Tokyo') as hour_jst,
+    COUNT(*) as total_events,
     COUNT(DISTINCT actor.user.email_addr) as active_users,
     COUNT(CASE WHEN activity_id = 7 THEN 1 END) as downloads,
     COUNT(CASE WHEN status_id = 2 THEN 1 END) as failures
-FROM seccamp2025_b1_security_lake.google_workspace
-WHERE from_unixtime(time/1000) > current_timestamp - interval '30' day
-GROUP BY DATE(from_unixtime(time/1000))
-ORDER BY activity_date DESC;
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+GROUP BY EXTRACT(HOUR FROM from_unixtime(time/1000) AT TIME ZONE 'Asia/Tokyo')
+ORDER BY hour_jst;
 ```
 
-### 3. 複合条件での異常検知
+</details>
+
+### 練習問題
+
+上記のクエリを参考に、以下の質問に答えるクエリを書いてみましょう。
+
+**1. 今日最も多くのファイルを共有（activity_id = 8）したユーザーは誰ですか？**
+
+<details>
+<summary>💡 ヒント</summary>
+
+- activity_id = 8 が共有を表します
+- GROUP BYでユーザーごとに集計
+- COUNT(*)で共有回数をカウント
+
+</details>
+
+<details>
+<summary>✅ 回答例</summary>
+
 ```sql
--- 複数の異常指標を組み合わせた検出
-WITH user_activity AS (
-    SELECT 
-        actor.user.email_addr as user_email,
-        COUNT(*) as total_activities,
-        COUNT(CASE WHEN activity_id = 7 THEN 1 END) as download_count,
-        COUNT(CASE WHEN status_id = 2 THEN 1 END) as failure_count,
-        COUNT(DISTINCT DATE(from_unixtime(time/1000))) as active_days,
-        COUNT(DISTINCT src_endpoint.ip) as unique_ips,
-        MAX(severity_id) as max_severity
-    FROM seccamp2025_b1_security_lake.google_workspace
-    WHERE from_unixtime(time/1000) > current_timestamp - interval '7' day
-    GROUP BY actor.user.email_addr
-)
 SELECT 
-    user_email,
-    total_activities,
-    download_count,
-    failure_count,
-    unique_ips,
-    CASE 
-        WHEN download_count > 50 AND unique_ips > 3 THEN '大量ダウンロード＋複数IP'
-        WHEN failure_count > 10 THEN '認証失敗多発'
-        WHEN max_severity >= 4 THEN '高リスク操作'
-        ELSE '要注意'
-    END as risk_category
-FROM user_activity
-WHERE download_count > 20 
-   OR failure_count > 5 
-   OR unique_ips > 5
-   OR max_severity >= 3
-ORDER BY download_count DESC, failure_count DESC;
+    actor.user.email_addr as user_email,
+    COUNT(*) as share_count,
+    COUNT(DISTINCT web_resources[1].name) as unique_files_shared
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+    AND activity_id = 8
+GROUP BY actor.user.email_addr
+ORDER BY share_count DESC
+LIMIT 10;
 ```
 
-## まとめ
+</details>
 
-このパートでは、実際の Security Lake データを使用して：
+**2. 過去1時間に10個以上のファイルをダウンロードしたユーザーはいますか？**
 
-1. Athena の基本的な操作方法を学習しました
-2. OCSF スキーマの構造と主要フィールドを理解しました
-3. 探索的データ分析の手法を実践しました
-4. 異常なアクティビティを発見するための SQL クエリを作成しました
+<details>
+<summary>💡 ヒント</summary>
 
-これらの知識は、次のパート（Part 6: Lambda実装と検知ルール作成）で、自動化された検知システムを構築する際の基盤となります。
+- 過去1時間: `time >= (unix_timestamp() - 3600) * 1000`
+- activity_id = 7 がダウンロード
+- HAVING句で`COUNT(*) >= 10`を指定
+
+</details>
+
+<details>
+<summary>✅ 回答例</summary>
+
+```sql
+SELECT 
+    actor.user.email_addr as user_email,
+    COUNT(*) as download_count,
+    MIN(from_unixtime(time/1000)) as first_download,
+    MAX(from_unixtime(time/1000)) as last_download
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+    AND activity_id = 7
+    AND time >= (unix_timestamp() - 3600) * 1000
+GROUP BY actor.user.email_addr
+HAVING COUNT(*) >= 10
+ORDER BY download_count DESC;
+```
+
+</details>
+
+**3. 日本以外の国からアクセスしているユーザーを見つけてください**
+
+<details>
+<summary>💡 ヒント</summary>
+
+- `src_endpoint.location.country`で国情報を取得
+- `!= 'JP'`または`NOT IN ('JP', 'Japan')`で日本以外をフィルタリング
+
+</details>
+
+<details>
+<summary>✅ 回答例</summary>
+
+```sql
+SELECT DISTINCT
+    actor.user.email_addr as user_email,
+    src_endpoint.location.country as country,
+    src_endpoint.ip as source_ip,
+    COUNT(*) as access_count
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+    AND src_endpoint.location.country IS NOT NULL
+    AND src_endpoint.location.country NOT IN ('JP', 'Japan')
+GROUP BY actor.user.email_addr, src_endpoint.location.country, src_endpoint.ip
+ORDER BY access_count DESC;
+```
+
+</details>
+
+### SQLクエリを書く際のヒント
+
+1. **まずは小さく始める**: LIMIT 10 などで結果を制限して、データの形を確認
+2. **段階的に条件を追加**: WHERE句の条件を1つずつ追加して結果を確認
+3. **エラーが出たら**: カラム名のスペルミス、括弧の対応、クォートの閉じ忘れをチェック
+4. **パフォーマンスを意識**: eventday でパーティションを指定することを忘れずに
+

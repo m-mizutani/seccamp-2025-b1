@@ -6,6 +6,10 @@
 
 Security Lake には Google Workspace のログが OCSF (Open Cybersecurity Schema Framework) 形式で保存されています。OCSF は異なるセキュリティ製品のログを標準化するフレームワークで、統一的な分析を可能にします。
 
+### 重要：ログレコードの一意性について
+
+各 Google Workspace ログレコードは **`api.request.uid`** フィールドによって一意に識別されます。このフィールドには Google Workspace の `id.uniqueQualifier` の値（17-19桁の数値文字列）が格納されており、ログの重複排除や特定のイベントの追跡に使用できます。
+
 ## 完全フィールド一覧
 
 ### 基本分類フィールド
@@ -51,7 +55,7 @@ Security Lake には Google Workspace のログが OCSF (Open Cybersecurity Sche
 | `api.service.name` | string | 使用されたサービス | `Google Identity`<br>`Google Drive API`<br>`Google Admin API` |
 | `api.service.version` | string | サービスバージョン（オプション） | `v1`, `v2` |
 | `api.operation` | string | 実行された操作 | `login`, `download`, `share`, etc. |
-| `api.request.uid` | string | リクエスト識別子 | リクエストID |
+| `api.request.uid` | string | **リクエスト識別子（各ログレコードのユニークID）** | `4266062960301827100` |
 | `api.response.code` | int | HTTP レスポンスコード（オプション） | `200`=成功<br>`403`=アクセス拒否<br>`404`=見つからない<br>`500`=サーバーエラー |
 | `api.response.message` | string | レスポンスメッセージ（オプション） | `OK`, `Forbidden` |
 
@@ -120,6 +124,31 @@ Security Lake には Google Workspace のログが OCSF (Open Cybersecurity Sche
 | `accountid` | string | アカウントID（パーティション用） | `123456789012` |
 
 ## よく使うクエリパターン
+
+### ユニークIDを使用した特定イベントの検索
+
+```sql
+-- 特定のユニークIDを持つイベントを検索
+SELECT 
+    api.request.uid as unique_id,
+    actor.user.email_addr,
+    api.operation,
+    from_unixtime(time/1000) as event_time
+FROM your_table
+WHERE api.request.uid = '4266062960301827100'
+    AND eventday = '20240801'
+
+-- 重複イベントの検出
+SELECT 
+    api.request.uid,
+    COUNT(*) as duplicate_count,
+    MIN(from_unixtime(time/1000)) as first_seen,
+    MAX(from_unixtime(time/1000)) as last_seen
+FROM your_table
+WHERE eventday BETWEEN '20240801' AND '20240831'
+GROUP BY api.request.uid
+HAVING COUNT(*) > 1
+```
 
 ### 時刻の扱い方
 
