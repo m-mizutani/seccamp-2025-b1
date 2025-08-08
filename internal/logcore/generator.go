@@ -61,6 +61,8 @@ func (g *Generator) GenerateLogEntry(seed LogSeed, baseDate time.Time, sequenceI
 		logEntry.Events = append(logEntry.Events, g.generateAdminEvent(user, resource, rng))
 	case EventTypeCalendar:
 		logEntry.Events = append(logEntry.Events, g.generateCalendarEvent(user, resource, rng))
+	case EventTypeGmail:
+		logEntry.Events = append(logEntry.Events, g.generateGmailEvent(user, resource, rng))
 	default:
 		logEntry.Events = append(logEntry.Events, g.generateDriveAccessEvent(user, resource, rng))
 	}
@@ -89,6 +91,8 @@ func (g *Generator) determineApplicationName(eventType uint8) string {
 		return "admin"
 	case EventTypeCalendar:
 		return "calendar"
+	case EventTypeGmail:
+		return "gmail"
 	default:
 		return "drive"
 	}
@@ -153,6 +157,20 @@ func (g *Generator) generateCalendarEvent(user User, resource Resource, rng *ran
 	}
 }
 
+// Gmailイベントを生成
+func (g *Generator) generateGmailEvent(user User, resource Resource, rng *rand.Rand) Event {
+	return Event{
+		Type: "mail_action",
+		Name: "send_message",
+		Parameters: []Parameter{
+			{Name: "message_id", Value: g.generateMessageID(rng)},
+			{Name: "recipient", Value: g.generateRecipientEmail(rng)},
+			{Name: "size_bytes", Value: fmt.Sprintf("%d", rng.Intn(50000)+1000)},
+			{Name: "is_encrypted", BoolValue: rng.Float32() < 0.3},
+		},
+	}
+}
+
 // ドキュメントIDを生成
 func (g *Generator) generateDocumentID(rng *rand.Rand) string {
 	return fmt.Sprintf("1%s", g.generateRandomString(rng, 43))
@@ -161,6 +179,23 @@ func (g *Generator) generateDocumentID(rng *rand.Rand) string {
 // イベントIDを生成
 func (g *Generator) generateEventID(rng *rand.Rand) string {
 	return g.generateRandomString(rng, 12)
+}
+
+// メッセージIDを生成
+func (g *Generator) generateMessageID(rng *rand.Rand) string {
+	return fmt.Sprintf("<%s@mail.gmail.com>", g.generateRandomString(rng, 16))
+}
+
+// 受信者メールアドレスを生成
+func (g *Generator) generateRecipientEmail(rng *rand.Rand) string {
+	// 内部ユーザーまたは外部ユーザーを選択
+	if rng.Float32() < 0.8 {
+		// 80%は内部ユーザー
+		return g.config.Users[rng.Intn(len(g.config.Users))].Email
+	}
+	// 20%は外部ユーザー
+	domains := []string{"example.com", "test.co.jp", "partner.org"}
+	return fmt.Sprintf("user%d@%s", rng.Intn(100), domains[rng.Intn(len(domains))])
 }
 
 // ランダム文字列を生成

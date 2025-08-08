@@ -21,71 +21,92 @@ func DefaultConfig() *Config {
 func generateUsers() []User {
 	users := []User{
 		// 管理者・マネージャー
-		{Email: "admin@muhai-academy.com", ProfileID: "114511147312345678901", Role: "admin"},
-		{Email: "manager@muhai-academy.com", ProfileID: "114511147312345678902", Role: "manager"},
-		{Email: "vice.manager@muhai-academy.com", ProfileID: "114511147312345678903", Role: "manager"},
-		{Email: "it.admin@muhai-academy.com", ProfileID: "114511147312345678904", Role: "admin"},
-		{Email: "security.admin@muhai-academy.com", ProfileID: "114511147312345678905", Role: "admin"},
+		{Email: "yamada.takeshi@muhai-academy.com", ProfileID: "114511147312345678901", Role: "admin"},
+		{Email: "suzuki.keiko@muhai-academy.com", ProfileID: "114511147312345678902", Role: "manager"},
+		{Email: "tanaka.hiroshi@muhai-academy.com", ProfileID: "114511147312345678903", Role: "manager"},
+		{Email: "sato.yuki@muhai-academy.com", ProfileID: "114511147312345678904", Role: "admin"},
+		{Email: "watanabe.jun@muhai-academy.com", ProfileID: "114511147312345678905", Role: "admin"},
 
 		// 教師（50人）
-		{Email: "teacher.math01@muhai-academy.com", ProfileID: "114511147312345678906", Role: "teacher"},
-		{Email: "teacher.math02@muhai-academy.com", ProfileID: "114511147312345678907", Role: "teacher"},
-		{Email: "teacher.math03@muhai-academy.com", ProfileID: "114511147312345678908", Role: "teacher"},
-		{Email: "teacher.english01@muhai-academy.com", ProfileID: "114511147312345678909", Role: "teacher"},
-		{Email: "teacher.english02@muhai-academy.com", ProfileID: "114511147312345678910", Role: "teacher"},
-		{Email: "teacher.english03@muhai-academy.com", ProfileID: "114511147312345678911", Role: "teacher"},
-		{Email: "teacher.science01@muhai-academy.com", ProfileID: "114511147312345678912", Role: "teacher"},
-		{Email: "teacher.science02@muhai-academy.com", ProfileID: "114511147312345678913", Role: "teacher"},
-		{Email: "teacher.history01@muhai-academy.com", ProfileID: "114511147312345678914", Role: "teacher"},
-		{Email: "teacher.history02@muhai-academy.com", ProfileID: "114511147312345678915", Role: "teacher"},
-		{Email: "teacher.japanese01@muhai-academy.com", ProfileID: "114511147312345678916", Role: "teacher"},
-		{Email: "teacher.japanese02@muhai-academy.com", ProfileID: "114511147312345678917", Role: "teacher"},
-		{Email: "teacher.pe01@muhai-academy.com", ProfileID: "114511147312345678918", Role: "teacher"},
-		{Email: "teacher.pe02@muhai-academy.com", ProfileID: "114511147312345678919", Role: "teacher"},
-		{Email: "teacher.art01@muhai-academy.com", ProfileID: "114511147312345678920", Role: "teacher"},
-		{Email: "teacher.music01@muhai-academy.com", ProfileID: "114511147312345678921", Role: "teacher"},
-		{Email: "teacher.computer01@muhai-academy.com", ProfileID: "114511147312345678922", Role: "teacher"},
-		{Email: "teacher.computer02@muhai-academy.com", ProfileID: "114511147312345678923", Role: "teacher"},
-		{Email: "teacher.economics01@muhai-academy.com", ProfileID: "114511147312345678924", Role: "teacher"},
-		{Email: "teacher.psychology01@muhai-academy.com", ProfileID: "114511147312345678925", Role: "teacher"},
+		{Email: "kobayashi.akira@muhai-academy.com", ProfileID: "114511147312345678906", Role: "teacher"},
+		{Email: "nakamura.yui@muhai-academy.com", ProfileID: "114511147312345678907", Role: "teacher"},
+		{Email: "yamamoto.shinji@muhai-academy.com", ProfileID: "114511147312345678908", Role: "teacher"},
+		{Email: "johnson.sarah@muhai-academy.com", ProfileID: "114511147312345678909", Role: "teacher"},
+		{Email: "smith.michael@muhai-academy.com", ProfileID: "114511147312345678910", Role: "teacher"},
+		{Email: "brown.jennifer@muhai-academy.com", ProfileID: "114511147312345678911", Role: "teacher"},
+		{Email: "ito.masahiro@muhai-academy.com", ProfileID: "114511147312345678912", Role: "teacher"},
+		{Email: "takahashi.emi@muhai-academy.com", ProfileID: "114511147312345678913", Role: "teacher"},
+		{Email: "mori.kenichi@muhai-academy.com", ProfileID: "114511147312345678914", Role: "teacher"},
+		{Email: "ishikawa.naomi@muhai-academy.com", ProfileID: "114511147312345678915", Role: "teacher"},
+		{Email: "fujita.haruka@muhai-academy.com", ProfileID: "114511147312345678916", Role: "teacher"},
+		{Email: "okamoto.satoshi@muhai-academy.com", ProfileID: "114511147312345678917", Role: "teacher"},
+		{Email: "kimura.daichi@muhai-academy.com", ProfileID: "114511147312345678918", Role: "teacher"},
+		{Email: "hayashi.yuka@muhai-academy.com", ProfileID: "114511147312345678919", Role: "teacher"},
+		{Email: "saito.noriko@muhai-academy.com", ProfileID: "114511147312345678920", Role: "teacher"},
+		{Email: "kawaguchi.ryo@muhai-academy.com", ProfileID: "114511147312345678921", Role: "teacher"},
+		{Email: "nishimura.kenji@muhai-academy.com", ProfileID: "114511147312345678922", Role: "teacher"},
+		{Email: "matsuda.ayumi@muhai-academy.com", ProfileID: "114511147312345678923", Role: "teacher"},
+		{Email: "honda.takuya@muhai-academy.com", ProfileID: "114511147312345678924", Role: "teacher"},
+		{Email: "ogawa.mika@muhai-academy.com", ProfileID: "114511147312345678925", Role: "teacher"},
 	}
 
 	// 残りの教師を自動生成
-	for i := 21; i <= 50; i++ {
+	teacherNames := []string{
+		"yoshida.tomohiro", "hasegawa.miyuki", "shimizu.kazuya", "inoue.sayuri", "kato.daisuke",
+		"sakamoto.rina", "abe.shinichiro", "nakajima.megumi", "fujimoto.tatsuya", "ohara.kanako",
+		"matsumoto.yuichi", "ikeda.mari", "hashimoto.kenta", "yamazaki.chihiro", "kuroda.noboru",
+		"ueda.asuka", "morita.ryuji", "takeuchi.yumiko", "kaneko.hideki", "nagai.sachiko",
+		"doi.masaki", "fukuda.eriko", "tsuchiya.koichi", "kamata.yukari", "higuchi.tetsuo",
+		"miyamoto.nanami", "ozawa.jiro", "maeda.kaori", "sugiyama.akihiko", "nomura.reiko",
+	}
+	
+	for i := 0; i < len(teacherNames); i++ {
 		users = append(users, User{
-			Email:     fmt.Sprintf("teacher%02d@muhai-academy.com", i),
-			ProfileID: fmt.Sprintf("1145111473123456789%02d", 25+i),
+			Email:     fmt.Sprintf("%s@muhai-academy.com", teacherNames[i]),
+			ProfileID: fmt.Sprintf("1145111473123456789%02d", 26+i),
 			Role:      "teacher",
 		})
 	}
 
 	// スタッフ（20人）
+	staffNames := []string{
+		"yoshimura.takako", "aoki.hiroyuki", "yamashita.kumiko", "ishida.masaru", "ogura.chiaki",
+		"kondo.yasuhiro", "sasaki.natsumi", "miura.shigeru", "fujikawa.yoko", "okada.kazuhiko",
+		"harada.midori", "nishida.toshio", "maruyama.sanae", "imai.ryosuke", "takeda.mihoko",
+		"yokoyama.kengo", "matsushita.aya", "ono.takahiro", "tamura.kyoko", "nakano.shingo",
+	}
+	
 	staffRoles := []string{"staff", "counselor", "librarian", "nurse", "security", "maintenance"}
-	for i := 1; i <= 20; i++ {
-		role := staffRoles[(i-1)%len(staffRoles)]
+	for i := 0; i < len(staffNames); i++ {
+		role := staffRoles[i%len(staffRoles)]
 		users = append(users, User{
-			Email:     fmt.Sprintf("staff%02d@muhai-academy.com", i),
-			ProfileID: fmt.Sprintf("11451114731234567%03d", 800+i),
+			Email:     fmt.Sprintf("%s@muhai-academy.com", staffNames[i]),
+			ProfileID: fmt.Sprintf("11451114731234567%03d", 801+i),
 			Role:      role,
 		})
 	}
 
 	// 学生（10人）
-	for i := 1; i <= 10; i++ {
+	studentNames := []string{
+		"sato.haruto", "suzuki.yua", "takahashi.sota", "tanaka.mio", "ito.ren",
+		"watanabe.aoi", "yamamoto.haruki", "nakamura.sakura", "kobayashi.yuto", "kato.himari",
+	}
+	
+	for i := 0; i < len(studentNames); i++ {
 		users = append(users, User{
-			Email:     fmt.Sprintf("student%02d@muhai-academy.com", i),
-			ProfileID: fmt.Sprintf("11451114731234567%03d", 900+i),
+			Email:     fmt.Sprintf("%s@muhai-academy.com", studentNames[i]),
+			ProfileID: fmt.Sprintf("11451114731234567%03d", 901+i),
 			Role:      "student",
 		})
 	}
 
 	// 外部ユーザー（5人）
 	externalUsers := []User{
-		{Email: "external.instructor@partner-company.com", ProfileID: "114511147312345671001", Role: "external"},
-		{Email: "consultant@consulting-firm.jp", ProfileID: "114511147312345671002", Role: "external"},
-		{Email: "auditor@audit-firm.com", ProfileID: "114511147312345671003", Role: "external"},
-		{Email: "contractor@tech-company.com", ProfileID: "114511147312345671004", Role: "external"},
-		{Email: "guest.lecturer@university.ac.jp", ProfileID: "114511147312345671005", Role: "external"},
+		{Email: "taniguchi.keisuke@partner-company.com", ProfileID: "114511147312345671001", Role: "external"},
+		{Email: "miyazaki.hiromi@consulting-firm.jp", ProfileID: "114511147312345671002", Role: "external"},
+		{Email: "kimura.toshiyuki@audit-firm.com", ProfileID: "114511147312345671003", Role: "external"},
+		{Email: "anderson.james@tech-company.com", ProfileID: "114511147312345671004", Role: "external"},
+		{Email: "yamaguchi.professor@university.ac.jp", ProfileID: "114511147312345671005", Role: "external"},
 	}
 	users = append(users, externalUsers...)
 
@@ -166,21 +187,13 @@ func generateResources() []Resource {
 		}
 	}
 
-	// 個人フォルダ（90個）
-	for i := 1; i <= 90; i++ {
-		var prefix string
-		switch {
-		case i <= 50:
-			prefix = "teacher"
-		case i <= 70:
-			prefix = "staff"
-		case i <= 80:
-			prefix = "student"
-		default:
-			prefix = "external"
-		}
+	// 個人フォルダ（ユーザーごとに生成）
+	allUsers := generateUsers()
+	for _, user := range allUsers {
+		// メールアドレスから@前の部分を取得
+		emailPrefix := strings.Split(user.Email, "@")[0]
 		resources = append(resources, Resource{
-			Name:       fmt.Sprintf("個人/%s%02d/", prefix, i),
+			Name:       fmt.Sprintf("個人/%s/", emailPrefix),
 			Type:       "folder",
 			ID:         fmt.Sprintf("1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE%04d", idCounter),
 			Visibility: "private",
