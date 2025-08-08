@@ -208,29 +208,64 @@ func extractWebResourcesFromEventParameters(events []struct {
 
 	// Extract document/resource information from event parameters
 	for _, event := range events {
+		var docID, docTitle, docType string
+		
+		// First pass: collect all relevant parameters
 		for _, param := range event.Parameters {
-			if param.Name == "doc_id" || param.Name == "document_id" || param.Name == "file_id" {
-				if docID, ok := param.Value.(string); ok && docID != "" {
-					webResource := struct {
-						Name      string `parquet:"name,optional"`
-						UID       string `parquet:"uid,optional"`
-						Type      string `parquet:"type,optional"`
-						URLString string `parquet:"url_string,optional"`
-						Data      struct {
-							Classification string `parquet:"classification,optional"`
-						} `parquet:"data,optional"`
-					}{
-						UID:  docID,
-						Type: "document",
-					}
-
-					// Build URL based on document ID
-					webResource.URLString = fmt.Sprintf("https://docs.google.com/document/d/%s", docID)
-					webResource.Data.Classification = "internal"
-
-					resources = append(resources, webResource)
+			switch param.Name {
+			case "doc_id", "document_id", "file_id":
+				if param.Value != nil {
+					docID = fmt.Sprintf("%v", param.Value)
+				}
+			case "doc_title", "document_title", "file_name":
+				if param.Value != nil {
+					docTitle = fmt.Sprintf("%v", param.Value)
+				}
+			case "doc_type", "document_type", "file_type":
+				if param.Value != nil {
+					docType = fmt.Sprintf("%v", param.Value)
 				}
 			}
+		}
+		
+		// Create resource if we have at least ID or title
+		if docID != "" || docTitle != "" {
+			webResource := struct {
+				Name      string `parquet:"name,optional"`
+				UID       string `parquet:"uid,optional"`
+				Type      string `parquet:"type,optional"`
+				URLString string `parquet:"url_string,optional"`
+				Data      struct {
+					Classification string `parquet:"classification,optional"`
+				} `parquet:"data,optional"`
+			}{
+				Name: docTitle,
+				UID:  docID,
+				Type: docType,
+			}
+			
+			// Set default type if not specified
+			if webResource.Type == "" {
+				webResource.Type = "document"
+			}
+
+			// Build URL based on document ID and type
+			if docID != "" {
+				switch docType {
+				case "spreadsheet":
+					webResource.URLString = fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s", docID)
+				case "presentation":
+					webResource.URLString = fmt.Sprintf("https://docs.google.com/presentation/d/%s", docID)
+				case "folder":
+					webResource.URLString = fmt.Sprintf("https://drive.google.com/drive/folders/%s", docID)
+				default:
+					webResource.URLString = fmt.Sprintf("https://docs.google.com/document/d/%s", docID)
+				}
+			}
+			
+			webResource.Data.Classification = "internal"
+
+			resources = append(resources, webResource)
 		}
 	}
 

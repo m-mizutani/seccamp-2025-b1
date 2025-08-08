@@ -110,7 +110,7 @@ func (g *Generator) generateDriveAccessEvent(user User, resource Resource, rng *
 		Type: "access",
 		Name: "view",
 		Parameters: []Parameter{
-			{Name: "doc_id", Value: g.generateDocumentID(rng)},
+			{Name: "doc_id", Value: resource.ID},
 			{Name: "doc_title", Value: resource.Name},
 			{Name: "doc_type", Value: resource.Type},
 			{Name: "owner", Value: user.Email},
