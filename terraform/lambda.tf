@@ -304,7 +304,7 @@ resource "aws_lambda_function" "auditlog" {
 # Lambda Function URL for public access
 resource "aws_lambda_function_url" "auditlog" {
   count = var.enable_active_resources ? 1 : 0
-  
+
   function_name      = aws_lambda_function.auditlog.function_name
   authorization_type = "NONE"
 
@@ -313,7 +313,7 @@ resource "aws_lambda_function_url" "auditlog" {
     allow_methods     = ["GET"]
     allow_origins     = ["*"]
     allow_headers     = ["*"]
-    max_age          = 86400
+    max_age           = 86400
   }
 }
 
@@ -390,8 +390,6 @@ resource "aws_lambda_function" "importer" {
 
 # EventBridge rule for 5-minute interval execution
 resource "aws_cloudwatch_event_rule" "importer_schedule" {
-  count = var.enable_active_resources ? 1 : 0
-  
   name                = "${var.basename}-importer-schedule"
   description         = "Trigger importer Lambda every 5 minutes"
   schedule_expression = "rate(5 minutes)"
@@ -404,22 +402,18 @@ resource "aws_cloudwatch_event_rule" "importer_schedule" {
 
 # EventBridge target
 resource "aws_cloudwatch_event_target" "importer_target" {
-  count = var.enable_active_resources ? 1 : 0
-  
-  rule      = aws_cloudwatch_event_rule.importer_schedule[0].name
+  rule      = aws_cloudwatch_event_rule.importer_schedule.name
   target_id = "${var.basename}-importer-target"
   arn       = aws_lambda_function.importer.arn
 }
 
 # Permission for EventBridge to invoke Lambda
 resource "aws_lambda_permission" "allow_eventbridge" {
-  count = var.enable_active_resources ? 1 : 0
-  
   statement_id  = "AllowExecutionFromEventBridge"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.importer.function_name
   principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.importer_schedule[0].arn
+  source_arn    = aws_cloudwatch_event_rule.importer_schedule.arn
 }
 
 # S3 bucket for Athena query results

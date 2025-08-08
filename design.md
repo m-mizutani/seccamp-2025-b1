@@ -26,6 +26,11 @@
   - `gray`
   - `black`
   - `white`
+  - `cyan`
+  - `teal`
+  - `gold`
+  - `silver`
+  - `indigo`
 - 原則、チームごとに必要なリソースはモジュール化する
 
 

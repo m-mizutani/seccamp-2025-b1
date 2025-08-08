@@ -43,7 +43,7 @@ resource "aws_s3_bucket_notification" "raw_logs" {
 
   topic {
     topic_arn = aws_sns_topic.raw_logs.arn
-    events    = [
+    events = [
       "s3:ObjectCreated:Put",
       "s3:ObjectCreated:Post",
       "s3:ObjectCreated:Copy",

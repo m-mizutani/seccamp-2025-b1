@@ -98,6 +98,7 @@ const (
 	EventTypeLogin       uint8 = 2
 	EventTypeAdmin       uint8 = 3
 	EventTypeCalendar    uint8 = 4
+	EventTypeGmail       uint8 = 5
 )
 
 // 異常パターン定数

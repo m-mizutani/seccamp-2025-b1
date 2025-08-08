@@ -152,8 +152,9 @@ func (g *Generator) selectActivityPattern(currentTime time.Time, sequence int) (
 		// 残業時間
 		eventType = g.selectOvertimeEvent(rng)
 	default:
-		// その他の時間
-		eventType = logcore.EventTypeLogin
+		// その他の時間（夜間・早朝）も通常の業務時間と同じ比率を維持
+		// ただし全体量は getExpectedRate で調整済み
+		eventType = g.selectBusinessHoursEvent(rng)
 	}
 
 	// ユーザー選択（重み付き）
@@ -168,10 +169,11 @@ func (g *Generator) selectActivityPattern(currentTime time.Time, sequence int) (
 // 業務時間のイベント選択
 func (g *Generator) selectBusinessHoursEvent(rng *rand.Rand) uint8 {
 	weights := map[uint8]int{
-		logcore.EventTypeDriveAccess: 50,
-		logcore.EventTypeLogin:       30,
-		logcore.EventTypeAdmin:       15,
-		logcore.EventTypeCalendar:    5,
+		logcore.EventTypeDriveAccess: 60,
+		logcore.EventTypeGmail:       25,
+		logcore.EventTypeCalendar:    9,
+		logcore.EventTypeLogin:       5,
+		logcore.EventTypeAdmin:       1,
 	}
 
 	return g.weightedSelect(rng, weights)
@@ -181,8 +183,10 @@ func (g *Generator) selectBusinessHoursEvent(rng *rand.Rand) uint8 {
 func (g *Generator) selectOvertimeEvent(rng *rand.Rand) uint8 {
 	weights := map[uint8]int{
 		logcore.EventTypeDriveAccess: 70,
-		logcore.EventTypeLogin:       20,
-		logcore.EventTypeAdmin:       10,
+		logcore.EventTypeGmail:       20,
+		logcore.EventTypeCalendar:    5,
+		logcore.EventTypeLogin:       4,
+		logcore.EventTypeAdmin:       1,
 	}
 
 	return g.weightedSelect(rng, weights)

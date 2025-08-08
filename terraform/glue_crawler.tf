@@ -15,7 +15,7 @@ resource "aws_glue_crawler" "security_lake" {
 
   # Target the Security Lake S3 bucket
   database_name = "amazon_security_lake_glue_db_${replace(var.aws_region, "-", "_")}"
-  
+
   s3_target {
     path = "s3://${replace(aws_securitylake_data_lake.main.s3_bucket_arn, "arn:aws:s3:::", "")}/ext/google-workspace/"
   }
