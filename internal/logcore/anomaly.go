@@ -18,11 +18,15 @@ type AnomalyFunc func(*GoogleWorkspaceLogEntry, *rand.Rand) *GoogleWorkspaceLogE
 func NewAnomalyGenerator() *AnomalyGenerator {
 	return &AnomalyGenerator{
 		Patterns: map[uint8]AnomalyFunc{
-			PatternExample1NightAdminDownload: generateExample1NightAdminDownload,
-			PatternExample2ExternalLinkAccess: generateExample2ExternalLinkAccess,
-			PatternExample3VpnLateralMovement: generateExample3VpnLateralMovement,
-			PatternTimeAnomaly:                generateTimeAnomaly,
-			PatternVolumeAnomaly:              generateVolumeAnomaly,
+			PatternExample1NightAdminDownload:    generateExample1NightAdminDownload,
+			PatternExample2ExternalLinkAccess:    generateExample2ExternalLinkAccess,
+			PatternExample3VpnLateralMovement:    generateExample3VpnLateralMovement,
+			PatternTimeAnomaly:                   generateTimeAnomaly,
+			PatternVolumeAnomaly:                 generateVolumeAnomaly,
+			PatternExample4HighFreqAuthAttack:    generateExample4HighFreqAuthAttack,
+			PatternExample5RapidDataTheft:        generateExample5RapidDataTheft,
+			PatternExample6MultiServiceProbing:   generateExample6MultiServiceProbing,
+			PatternExample7SimultaneousGeoAccess: generateExample7SimultaneousGeoAccess,
 		},
 	}
 }
@@ -233,4 +237,230 @@ func generateRandomString(rng *rand.Rand, length int) string {
 		result[i] = chars[rng.Intn(len(chars))]
 	}
 	return string(result)
+}
+
+// Pattern 4: 高頻度認証攻撃
+func generateExample4HighFreqAuthAttack(base *GoogleWorkspaceLogEntry, rng *rand.Rand) *GoogleWorkspaceLogEntry {
+	// 固定の攻撃者IP
+	base.IPAddress = "203.0.113.99"
+	
+	// ログインイベントに変更
+	base.ID.ApplicationName = "login"
+	
+	// 95%は失敗、5%は成功
+	if rng.Float32() < 0.95 {
+		base.Events = []Event{
+			{
+				Type: "login",
+				Name: "login_failure",
+				Parameters: []Parameter{
+					{Name: "login_type", Value: "google_password"},
+					{Name: "login_failure_type", Value: "account_disabled"},
+					{Name: "is_suspicious", BoolValue: true},
+				},
+			},
+		}
+	} else {
+		// 成功した場合
+		base.Events = []Event{
+			{
+				Type: "login",
+				Name: "login_success",
+				Parameters: []Parameter{
+					{Name: "login_type", Value: "google_password"},
+					{Name: "login_challenge_method", MultiStrValue: []string{"password"}},
+					{Name: "is_suspicious", BoolValue: true},
+				},
+			},
+		}
+	}
+	
+	return base
+}
+
+// Pattern 5: 超高速データ窃取
+func generateExample5RapidDataTheft(base *GoogleWorkspaceLogEntry, rng *rand.Rand) *GoogleWorkspaceLogEntry {
+	// 特定の侵害されたユーザーとIP
+	base.Actor.Email = "compromised@example.com"
+	base.IPAddress = "198.51.100.99"
+	
+	// ドライブアクセスイベント
+	base.ID.ApplicationName = "drive"
+	
+	// ランダムなファイルへの大量ダウンロード
+	confidentialFiles := []string{
+		"財務報告書_2024Q3.xlsx",
+		"顧客リスト_機密.csv",
+		"製品開発計画_2025.docx",
+		"人事評価データ.xlsx",
+		"研究データ_機密.zip",
+	}
+	
+	base.Events = []Event{
+		{
+			Type: "access",
+			Name: "download",
+			Parameters: []Parameter{
+				{Name: "doc_id", Value: generateDocumentID(rng)},
+				{Name: "doc_title", Value: confidentialFiles[rng.Intn(len(confidentialFiles))]},
+				{Name: "doc_type", Value: "file"},
+				{Name: "owner", Value: "admin@muhai-academy.com"},
+				{Name: "visibility", Value: "private"},
+				{Name: "primary_event", BoolValue: true},
+				{Name: "size_bytes", Value: fmt.Sprintf("%d", 1000000+rng.Intn(50000000))}, // 1MB-50MB
+			},
+		},
+	}
+	
+	return base
+}
+
+// Pattern 6: マルチサービス不正アクセス試行
+func generateExample6MultiServiceProbing(base *GoogleWorkspaceLogEntry, rng *rand.Rand) *GoogleWorkspaceLogEntry {
+	// 特定の感染ユーザー
+	base.Actor.Email = "infected@example.com"
+	
+	// サービスをランダムに選択
+	services := []string{"drive", "calendar", "gmail", "admin"}
+	selectedService := services[rng.Intn(len(services))]
+	base.ID.ApplicationName = selectedService
+	
+	// 70%は権限エラー
+	if rng.Float32() < 0.7 {
+		switch selectedService {
+		case "drive":
+			base.Events = []Event{
+				{
+					Type: "access",
+					Name: "access_denied",
+					Parameters: []Parameter{
+						{Name: "doc_id", Value: generateDocumentID(rng)},
+						{Name: "doc_title", Value: "機密ファイル"},
+						{Name: "denied_reason", Value: "insufficient_permissions"},
+					},
+				},
+			}
+		case "admin":
+			base.Events = []Event{
+				{
+					Type: "USER_SETTINGS",
+					Name: "PERMISSION_DENIED",
+					Parameters: []Parameter{
+						{Name: "USER_EMAIL", Value: base.Actor.Email},
+						{Name: "denied_reason", Value: "not_admin"},
+					},
+				},
+			}
+		default:
+			base.Events = []Event{
+				{
+					Type: "access",
+					Name: "permission_denied",
+					Parameters: []Parameter{
+						{Name: "service", Value: selectedService},
+						{Name: "denied_reason", Value: "unauthorized_access"},
+					},
+				},
+			}
+		}
+	} else {
+		// 30%は成功（プロービングの一環として一部成功）
+		switch selectedService {
+		case "drive":
+			base.Events = []Event{
+				{
+					Type: "access",
+					Name: "view",
+					Parameters: []Parameter{
+						{Name: "doc_id", Value: generateDocumentID(rng)},
+						{Name: "doc_title", Value: "共有ドキュメント"},
+					},
+				},
+			}
+		case "calendar":
+			base.Events = []Event{
+				{
+					Type: "event_change",
+					Name: "view_event",
+					Parameters: []Parameter{
+						{Name: "calendar_id", Value: "shared"},
+						{Name: "event_id", Value: fmt.Sprintf("%s", generateRandomString(rng, 12))},
+					},
+				},
+			}
+		case "gmail":
+			base.Events = []Event{
+				{
+					Type: "mail_action",
+					Name: "list_messages",
+					Parameters: []Parameter{
+						{Name: "folder", Value: "INBOX"},
+					},
+				},
+			}
+		default:
+			base.Events = []Event{
+				{
+					Type: "access",
+					Name: "read",
+					Parameters: []Parameter{
+						{Name: "service", Value: selectedService},
+					},
+				},
+			}
+		}
+	}
+	
+	return base
+}
+
+// Pattern 7: 地理的同時アクセス
+func generateExample7SimultaneousGeoAccess(base *GoogleWorkspaceLogEntry, rng *rand.Rand) *GoogleWorkspaceLogEntry {
+	// 特定のユーザー
+	base.Actor.Email = "travel@example.com"
+	
+	// 50%の確率で国を切り替え
+	if rng.Float32() < 0.5 {
+		// 日本からのアクセス
+		base.IPAddress = "192.0.2.10"
+	} else {
+		// 米国からのアクセス
+		base.IPAddress = "198.51.100.20"
+	}
+	
+	// 通常の業務操作
+	operations := []struct {
+		appName string
+		event   Event
+	}{
+		{
+			appName: "drive",
+			event: Event{
+				Type: "access",
+				Name: "view",
+				Parameters: []Parameter{
+					{Name: "doc_id", Value: generateDocumentID(rng)},
+					{Name: "doc_title", Value: "業務ファイル.docx"},
+					{Name: "doc_type", Value: "document"},
+				},
+			},
+		},
+		{
+			appName: "gmail",
+			event: Event{
+				Type: "mail_action",
+				Name: "send_message",
+				Parameters: []Parameter{
+					{Name: "message_id", Value: fmt.Sprintf("<%s@mail.gmail.com>", generateRandomString(rng, 16))},
+					{Name: "recipient", Value: "colleague@muhai-academy.com"},
+				},
+			},
+		},
+	}
+	
+	selected := operations[rng.Intn(len(operations))]
+	base.ID.ApplicationName = selected.appName
+	base.Events = []Event{selected.event}
+	
+	return base
 }

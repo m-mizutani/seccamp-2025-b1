@@ -13,12 +13,90 @@ import (
 // シードジェネレータ
 type Generator struct {
 	config *logcore.Config
+	// 常時発生型異常パターン用の状態管理
+	authAttackState    *authAttackState
+	dataTheftState     *dataTheftState
+	serviceProbingState *serviceProbingState
+	geoAccessState     *geoAccessState
+}
+
+// 常時発生型異常パターンの状態管理構造体
+type authAttackState struct {
+	attackerIP  string
+	targetUsers []string
+}
+
+type dataTheftState struct {
+	theftUser string
+	theftIP   string
+	fileIndex int
+}
+
+type serviceProbingState struct {
+	probingUser  string
+	serviceOrder []string
+	currentIndex int
+}
+
+type geoAccessState struct {
+	user       string
+	country1   string
+	country1IP string
+	country2   string
+	country2IP string
+	lastCountry int // 0 or 1
 }
 
 // 新しいシードジェネレータを作成
 func NewGenerator() *Generator {
-	return &Generator{
+	g := &Generator{
 		config: logcore.DefaultConfig(),
+	}
+	g.initializeContinuousPatterns()
+	return g
+}
+
+// 常時発生型異常パターンの初期化
+func (g *Generator) initializeContinuousPatterns() {
+	// Pattern 4: 高頻度認証攻撃
+	g.authAttackState = &authAttackState{
+		attackerIP: "203.0.113.99",
+		targetUsers: []string{
+			"admin@example.com",
+			"user1@example.com",
+			"user2@example.com",
+			"support@example.com",
+			"test@example.com",
+		},
+	}
+
+	// Pattern 5: 超高速データ窃取
+	g.dataTheftState = &dataTheftState{
+		theftUser: "compromised@example.com",
+		theftIP:   "198.51.100.99",
+		fileIndex: 0,
+	}
+
+	// Pattern 6: マルチサービス不正アクセス試行
+	g.serviceProbingState = &serviceProbingState{
+		probingUser: "infected@example.com",
+		serviceOrder: []string{
+			"Google Drive",
+			"Google Calendar",
+			"Google Gmail",
+			"Google Admin",
+		},
+		currentIndex: 0,
+	}
+
+	// Pattern 7: 地理的同時アクセス
+	g.geoAccessState = &geoAccessState{
+		user:        "travel@example.com",
+		country1:    "JP",
+		country1IP:  "192.0.2.10",
+		country2:    "US",
+		country2IP:  "198.51.100.20",
+		lastCountry: 0,
 	}
 }
 
@@ -48,11 +126,17 @@ func (g *Generator) GenerateDayTemplate(date time.Time, anomalyRatio float64) (*
 				Seed:      g.generateSecondSeed(currentTime, i),
 			}
 
-			// 時間帯・曜日による活動パターン決定
-			seed.EventType, seed.UserIndex, seed.ResourceIdx = g.selectActivityPattern(currentTime, i)
-
-			// 異常パターンの配置判定
+			// 異常パターンの配置判定（先に判定）
 			seed.Pattern = g.determineAnomalyPattern(currentTime, i, anomalyRatio)
+
+			// パターンに応じた活動パターン決定
+			if seed.Pattern >= logcore.PatternExample4HighFreqAuthAttack {
+				// 新しい常時発生型パターンの場合、特別な処理
+				seed.EventType, seed.UserIndex, seed.ResourceIdx = g.selectContinuousPatternActivity(seed.Pattern, currentTime, i)
+			} else {
+				// 通常の時間帯・曜日による活動パターン決定
+				seed.EventType, seed.UserIndex, seed.ResourceIdx = g.selectActivityPattern(currentTime, i)
+			}
 
 			template.LogSeeds = append(template.LogSeeds, seed)
 		}
@@ -78,23 +162,23 @@ func (g *Generator) generateLogCount(t time.Time) int {
 
 // 時間帯・曜日による期待ログレート計算
 func (g *Generator) getExpectedRate(hour int, weekday time.Weekday) float64 {
-	// 基本レート: 毎秒10件
-	baseRate := 10.0
+	// 基本レート: 毎秒200件（さらに2倍に増加）
+	baseRate := 200.0
 
-	// 時間帯補正
+	// 時間帯補正（最小値を引き上げ）
 	timeMultiplier := map[int]float64{
-		0: 0.1, 1: 0.05, 2: 0.05, 3: 0.05, 4: 0.05, 5: 0.1, // 深夜
-		6: 0.2, 7: 0.4, 8: 0.8, // 朝
+		0: 0.3, 1: 0.2, 2: 0.2, 3: 0.2, 4: 0.2, 5: 0.3, // 深夜（最低40-60件/秒）
+		6: 0.4, 7: 0.6, 8: 0.8, // 朝
 		9: 1.2, 10: 1.5, 11: 1.8, 12: 1.0, // 午前〜昼
 		13: 0.8, 14: 1.3, 15: 1.6, 16: 1.4, 17: 1.1, 18: 0.9, // 午後
-		19: 0.6, 20: 0.4, 21: 0.3, 22: 0.2, 23: 0.15, // 夜
+		19: 0.6, 20: 0.5, 21: 0.4, 22: 0.3, 23: 0.3, // 夜
 	}
 
 	// 曜日補正
 	weekdayMultiplier := map[time.Weekday]float64{
 		time.Monday: 1.0, time.Tuesday: 1.1, time.Wednesday: 1.2,
 		time.Thursday: 1.1, time.Friday: 0.9,
-		time.Saturday: 0.3, time.Sunday: 0.2,
+		time.Saturday: 0.5, time.Sunday: 0.4, // 週末も少し引き上げ
 	}
 
 	return baseRate * timeMultiplier[hour] * weekdayMultiplier[weekday]
@@ -253,30 +337,69 @@ func (g *Generator) determineAnomalyPattern(t time.Time, sequenceInSecond int, a
 	// 基本的な異常確率
 	baseAnomalyProb := anomalyRatio
 
+	// 新規パターン（常時発生）: 全体の2-3%程度
+	if rand.Float64() < 0.025 {
+		return g.selectContinuousAnomalyPattern(t, sequenceInSecond)
+	}
+
 	// 実例1: 夜間の管理者による大量学習データダウンロード
-	if (hour >= 18 || hour <= 9) && rand.Float64() < baseAnomalyProb*0.3 {
+	if (hour >= 18 || hour <= 9) && rand.Float64() < baseAnomalyProb*0.2 {
 		return logcore.PatternExample1NightAdminDownload
 	}
 
 	// 実例2: anyone with link設定ミスによる外部流出（まとまって発生）
 	if hour >= 10 && hour <= 16 {
 		// 15分間隔でバーストパターン（外部からの自動アクセス）
-		if t.Minute()%15 < 3 && rand.Float64() < baseAnomalyProb*0.5 {
+		if t.Minute()%15 < 3 && rand.Float64() < baseAnomalyProb*0.3 {
 			return logcore.PatternExample2ExternalLinkAccess
 		}
 	}
 
 	// 実例3: VPN脆弱性経由の水平移動攻撃（業務時間内の怪しい動作）
-	if hour >= 9 && hour <= 18 && rand.Float64() < baseAnomalyProb*0.2 {
+	if hour >= 9 && hour <= 18 && rand.Float64() < baseAnomalyProb*0.15 {
 		return logcore.PatternExample3VpnLateralMovement
 	}
 
 	// 一般的な軽微異常
-	if rand.Float64() < baseAnomalyProb*0.3 {
+	if rand.Float64() < baseAnomalyProb*0.2 {
 		return uint8(int(logcore.PatternTimeAnomaly) + rand.Intn(2)) // Pattern 4-5
 	}
 
 	return logcore.PatternNormal
+}
+
+// 常時発生型異常パターンの選択
+func (g *Generator) selectContinuousAnomalyPattern(t time.Time, sequenceInSecond int) uint8 {
+	second := t.Second()
+	
+	// Pattern 4: 高頻度認証攻撃（1分に3-5回）
+	if sequenceInSecond < 5 && second%(60/4) == 0 {
+		return logcore.PatternExample4HighFreqAuthAttack
+	}
+	
+	// Pattern 5: 超高速データ窃取（1分に10-15回）
+	if sequenceInSecond < 15 && second%(60/12) == 0 {
+		return logcore.PatternExample5RapidDataTheft
+	}
+	
+	// Pattern 6: マルチサービス不正アクセス（1分に3-5回）
+	if sequenceInSecond < 5 && (second+30)%(60/4) == 0 {
+		return logcore.PatternExample6MultiServiceProbing
+	}
+	
+	// Pattern 7: 地理的同時アクセス（1分に4-6回、2カ国合計）
+	if sequenceInSecond < 6 && (second+15)%(60/5) == 0 {
+		return logcore.PatternExample7SimultaneousGeoAccess
+	}
+	
+	// フォールバック
+	patterns := []uint8{
+		logcore.PatternExample4HighFreqAuthAttack,
+		logcore.PatternExample5RapidDataTheft,
+		logcore.PatternExample6MultiServiceProbing,
+		logcore.PatternExample7SimultaneousGeoAccess,
+	}
+	return patterns[rand.Intn(len(patterns))]
 }
 
 // 統計情報更新
@@ -297,6 +420,11 @@ func (g *Generator) updateStats(template *logcore.DayTemplate) {
 	template.Metadata.AnomalyStats["example3"] = g.countPattern(template.LogSeeds, logcore.PatternExample3VpnLateralMovement)
 	template.Metadata.AnomalyStats["time_anomaly"] = g.countPattern(template.LogSeeds, logcore.PatternTimeAnomaly)
 	template.Metadata.AnomalyStats["volume_anomaly"] = g.countPattern(template.LogSeeds, logcore.PatternVolumeAnomaly)
+	// 新規パターンの統計
+	template.Metadata.AnomalyStats["example4_auth"] = g.countPattern(template.LogSeeds, logcore.PatternExample4HighFreqAuthAttack)
+	template.Metadata.AnomalyStats["example5_theft"] = g.countPattern(template.LogSeeds, logcore.PatternExample5RapidDataTheft)
+	template.Metadata.AnomalyStats["example6_probe"] = g.countPattern(template.LogSeeds, logcore.PatternExample6MultiServiceProbing)
+	template.Metadata.AnomalyStats["example7_geo"] = g.countPattern(template.LogSeeds, logcore.PatternExample7SimultaneousGeoAccess)
 }
 
 // パターン数カウント
@@ -313,4 +441,94 @@ func (g *Generator) countPattern(seeds []logcore.LogSeed, pattern uint8) int {
 // 平日判定
 func isWeekday(weekday time.Weekday) bool {
 	return weekday >= time.Monday && weekday <= time.Friday
+}
+
+// 常時発生型パターン用の活動選択
+func (g *Generator) selectContinuousPatternActivity(pattern uint8, t time.Time, sequence int) (uint8, uint8, uint8) {
+	switch pattern {
+	case logcore.PatternExample4HighFreqAuthAttack:
+		return g.generatePattern4AuthAttack(t, sequence)
+	case logcore.PatternExample5RapidDataTheft:
+		return g.generatePattern5DataTheft(t, sequence)
+	case logcore.PatternExample6MultiServiceProbing:
+		return g.generatePattern6ServiceProbing(t, sequence)
+	case logcore.PatternExample7SimultaneousGeoAccess:
+		return g.generatePattern7GeoAccess(t, sequence)
+	default:
+		// フォールバック
+		return g.selectActivityPattern(t, sequence)
+	}
+}
+
+// Pattern 4: 高頻度認証攻撃
+func (g *Generator) generatePattern4AuthAttack(t time.Time, sequence int) (uint8, uint8, uint8) {
+	// 認証イベント
+	eventType := logcore.EventTypeLogin
+	
+	// ランダムなターゲットユーザーを選択
+	targetUserIndex := uint8(rand.Intn(len(g.authAttackState.targetUsers)))
+	
+	// リソースは認証なので0
+	resourceIndex := uint8(0)
+	
+	return eventType, targetUserIndex, resourceIndex
+}
+
+// Pattern 5: 超高速データ窃取
+func (g *Generator) generatePattern5DataTheft(t time.Time, sequence int) (uint8, uint8, uint8) {
+	// ダウンロードイベント
+	eventType := logcore.EventTypeDriveAccess
+	
+	// 特定の侵害されたユーザー
+	userIndex := uint8(10) // compromised@example.com用のインデックス
+	
+	// 異なるファイルを選択（インクリメント）
+	g.dataTheftState.fileIndex++
+	resourceIndex := uint8(g.dataTheftState.fileIndex % 100)
+	
+	return eventType, userIndex, resourceIndex
+}
+
+// Pattern 6: マルチサービス不正アクセス試行
+func (g *Generator) generatePattern6ServiceProbing(t time.Time, sequence int) (uint8, uint8, uint8) {
+	// サービスを順番に試行
+	serviceTypes := []uint8{
+		logcore.EventTypeDriveAccess,
+		logcore.EventTypeCalendar,
+		logcore.EventTypeGmail,
+		logcore.EventTypeAdmin,
+	}
+	
+	eventType := serviceTypes[g.serviceProbingState.currentIndex]
+	g.serviceProbingState.currentIndex = (g.serviceProbingState.currentIndex + 1) % len(serviceTypes)
+	
+	// 特定の感染ユーザー
+	userIndex := uint8(11) // infected@example.com用のインデックス
+	
+	// リソースはサービスに応じて選択
+	resourceIndex := uint8(rand.Intn(10))
+	
+	return eventType, userIndex, resourceIndex
+}
+
+// Pattern 7: 地理的同時アクセス
+func (g *Generator) generatePattern7GeoAccess(t time.Time, sequence int) (uint8, uint8, uint8) {
+	// 通常の業務操作（ドライブアクセスなど）
+	eventTypes := []uint8{
+		logcore.EventTypeDriveAccess,
+		logcore.EventTypeGmail,
+		logcore.EventTypeCalendar,
+	}
+	eventType := eventTypes[rand.Intn(len(eventTypes))]
+	
+	// 特定のユーザー
+	userIndex := uint8(12) // travel@example.com用のインデックス
+	
+	// 国を交互に切り替え
+	g.geoAccessState.lastCountry = (g.geoAccessState.lastCountry + 1) % 2
+	
+	// リソースは通常のアクセス
+	resourceIndex := uint8(rand.Intn(20))
+	
+	return eventType, userIndex, resourceIndex
 }

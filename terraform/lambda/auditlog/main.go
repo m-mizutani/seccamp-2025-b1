@@ -22,7 +22,7 @@ import (
 	"github.com/m-mizutani/seccamp-2025-b1/internal/logcore"
 )
 
-// kick
+// tomb
 
 // 埋め込まれたシードファイル（バイナリ圧縮形式）
 // S3アクセスに失敗した場合のフォールバックとして保持
