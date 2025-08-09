@@ -6,8 +6,8 @@ Google Workspace監査ログのシードデータを生成するツール。
 
 - ログシードの生成（時間分布、異常パターンを含む）
 - ローカルファイルまたはS3への出力
-- シードデータの倍率設定（データ量の増減）
 - 複数の出力フォーマット対応（JSON、バイナリ、圧縮バイナリ）
+- 常時発生型異常パターンの生成（24時間継続的に検知可能）
 
 ## インストール
 
@@ -33,11 +33,8 @@ go build -o loggen
 ### S3への出力
 
 ```bash
-# S3バケットに直接出力（デフォルト10倍）
+# S3バケットに直接出力
 ./loggen generate --output s3://seccamp2025-b1-auditlog-seeds/
-
-# 倍率を指定してS3に出力
-./loggen generate --output s3://seccamp2025-b1-auditlog-seeds/ --multiplier 20
 
 # 圧縮バイナリ形式でS3に出力（推奨）
 ./loggen generate --output s3://seccamp2025-b1-auditlog-seeds/ --format binary-compressed
@@ -64,7 +61,6 @@ go build -o loggen
 - `--output`: 出力先（ローカルディレクトリまたはs3://bucket/prefix/、デフォルト: ./output）
 - `--anomaly-ratio`: 異常ログの比率（0.0-1.0、デフォルト: 0.15）
 - `--format`: 出力フォーマット（json, binary, binary-compressed、デフォルト: binary-compressed）
-- `--multiplier`: シードデータの倍率（デフォルト: 1）
 - `--dry-run`: 実際にファイルを書き込まずに実行
 
 ## S3出力について
@@ -120,8 +116,7 @@ s3://bucket-name/prefix/seeds/day_YYYY-MM-DD.bin   # binary形式
 ```bash
 ./loggen generate \
   --output s3://seccamp2025-b1-auditlog-seeds/ \
-  --format binary-compressed \
-  --multiplier 10
+  --format binary-compressed
 ```
 
 ## トラブルシューティング
@@ -132,10 +127,19 @@ s3://bucket-name/prefix/seeds/day_YYYY-MM-DD.bin   # binary形式
 - S3バケットへの書き込み権限があるか確認
 - バケット名とリージョンが正しいか確認
 
-### メモリ不足エラー
+## 異常パターンについて
 
-大きな倍率を指定した場合、メモリ不足になる可能性があります：
+loggenは以下の異常パターンを生成します：
 
-- `--multiplier` の値を減らす
-- システムのメモリを増やす
-- 複数回に分けて生成する
+### 時間帯限定パターン（既存）
+1. **夜間の管理者による大量ダウンロード** - 18:00-9:00に発生
+2. **外部リンクアクセスバースト** - 10:00-16:00の15分間隔で発生
+3. **VPN経由の水平移動攻撃** - 9:00-18:00の業務時間内に発生
+
+### 常時発生型パターン（新規）
+4. **高頻度認証攻撃** - 24時間継続、1分に3-5回の認証失敗
+5. **超高速データ窃取** - 24時間継続、1分に10-15件のダウンロード
+6. **マルチサービス不正アクセス** - 24時間継続、複数サービスへの探索
+7. **地理的同時アクセス** - 24時間継続、2カ国から同時操作
+
+常時発生型パターンにより、5分間隔でのクエリでも確実に異常を検知できるようになりました。

@@ -43,11 +43,6 @@ func GenerateCommand() *cli.Command {
 				Usage: "Output format (json, binary, binary-compressed)",
 				Value: "binary-compressed",
 			},
-			&cli.IntFlag{
-				Name:  "multiplier",
-				Usage: "Multiply seed data by this factor",
-				Value: 1,
-			},
 			&cli.BoolFlag{
 				Name:  "dry-run",
 				Usage: "Show what would be generated without writing files",
@@ -64,7 +59,6 @@ func generateAction(ctx context.Context, c *cli.Command) error {
 	output := c.String("output")
 	anomalyRatio := c.Float64("anomaly-ratio")
 	format := c.String("format")
-	multiplier := c.Int("multiplier")
 	dryRun := c.Bool("dry-run")
 
 	// 日付パース
@@ -82,11 +76,6 @@ func generateAction(ctx context.Context, c *cli.Command) error {
 		return fmt.Errorf("failed to generate day template: %w", err)
 	}
 
-	// Multiply seeds if requested
-	if multiplier > 1 {
-		dayTemplate = multiplySeeds(dayTemplate, multiplier)
-		fmt.Printf("Multiplied seeds by %dx\n", multiplier)
-	}
 
 	fmt.Printf("Generated %d log seeds\n", len(dayTemplate.LogSeeds))
 
@@ -191,38 +180,6 @@ func saveAsBinaryCompressed(dayTemplate *logcore.DayTemplate, seedsDir, dateStr 
 	return nil
 }
 
-// multiplySeeds multiplies the seed data by the given factor
-func multiplySeeds(template *logcore.DayTemplate, multiplier int) *logcore.DayTemplate {
-	newTemplate := &logcore.DayTemplate{
-		Date:     template.Date,
-		LogSeeds: make([]logcore.LogSeed, 0, len(template.LogSeeds)*multiplier),
-		Metadata: template.Metadata,
-	}
-
-	for i := 0; i < multiplier; i++ {
-		for j, seed := range template.LogSeeds {
-			adjustedSeed := seed
-			// Spread timestamps across the day
-			adjustedSeed.Timestamp = seed.Timestamp + int64(i*8640)
-			// Vary user and resource indices
-			if i%2 == 0 {
-				adjustedSeed.UserIndex = uint8((int(seed.UserIndex) + i) % 256)
-			}
-			if i%3 == 0 {
-				adjustedSeed.ResourceIdx = uint8((int(seed.ResourceIdx) + i) % 256)
-			}
-			// Vary the seed value for different random generation
-			adjustedSeed.Seed = seed.Seed + uint32(i*1000+j)
-			
-			newTemplate.LogSeeds = append(newTemplate.LogSeeds, adjustedSeed)
-		}
-	}
-
-	// Update metadata
-	newTemplate.Metadata.TotalLogs = len(newTemplate.LogSeeds)
-	
-	return newTemplate
-}
 
 // saveToS3 saves the seed data to S3
 func saveToS3(ctx context.Context, dayTemplate *logcore.DayTemplate, s3Path string, targetDate time.Time, format string) error {

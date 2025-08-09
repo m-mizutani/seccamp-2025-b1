@@ -109,4 +109,9 @@ const (
 	PatternExample3VpnLateralMovement uint8 = 3
 	PatternTimeAnomaly                uint8 = 4
 	PatternVolumeAnomaly              uint8 = 5
+	// 新規追加パターン（常時発生型）
+	PatternExample4HighFreqAuthAttack    uint8 = 6
+	PatternExample5RapidDataTheft        uint8 = 7
+	PatternExample6MultiServiceProbing   uint8 = 8
+	PatternExample7SimultaneousGeoAccess uint8 = 9
 )

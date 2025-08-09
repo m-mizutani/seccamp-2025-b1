@@ -136,7 +136,7 @@ GitHubのWebサイトでPull Requestを作成します。
 
 ##### 6-1. GitHub Actionsでデプロイ状況を確認
 
-1. GitHubのリポジトリページ（https://github.com/seccamp2025-b/b1-secmon）を開く
+1. GitHubのリポジトリページ ( https://github.com/seccamp2025-b/b1-secmon ) を開く
 2. 「Actions」タブをクリック
 3. 最新のワークフロー実行を確認：
    - **緑のチェックマーク ✓**: デプロイ成功
@@ -310,7 +310,7 @@ GitHub Actions のログで以下を確認：
 
 2. **アラートメッセージ**
    - トリアージに必要な情報を含める
-   - 誤検知を減らすため、閾値は慎重に設定
+   - 誤検知を減らすため、条件や閾値は慎重に設定
 
 3. **パフォーマンス**
    - クエリは必要最小限のデータを取得
@@ -322,132 +322,358 @@ GitHub Actions のログで以下を確認：
 
 ## 検知ルールの作成
 
+検知ルールを作成し、定期実行される（想定の）Lambda関数に組み込み、検知システムを完成させます。SQLによって発見された事象をアラートとして発報する際、アラートを調査する担当者の行動をイメージして必要な情報を報告することが重要です。
+
+### 調査のためにアラートに含めるべき情報
+
+基本的には5W(1H)を抑える形式が望ましいです。そこからさらに調査の足がかりになるような情報を付与できるとよいでしょう。
+
+- Who: そのアラートを発生させた主体（principle, subject）
+  - ユーザID: 認証が済んでいるシステムならユーザ名があるとよいでしょう
+  - IPアドレス: リモートからのアクセスにおいて利用価値のある識別情報です
+- What: どのリソースに対してのアクセス、あるいは攻撃だったか
+  - 今回だと対象となるドキュメントであったり、ログイン試行なら対象ユーザIDなどが相当します
+- When: 検知をした時刻だけでなく、検知対象となったイベントが発生した時刻がより重要である点に注意です
+- Where: 今回はGoogle Workspaceなのでそのサービス内であることは自明ですが、例えばkubernetesのようなシステムではどのPod、Nodeで発生した事象なのかという情報は重要になります
+
+このほか、IoC（Indicator of Compromise）になりそうな情報や、アラートの概況（特に複数アラートを束ねる場合）を伝える情報を組み込むのが良いでしょう。
+
 ### 検知ルールの作成課題
 
 ここからは、実際にセキュリティイベントを検知するSQLクエリを作成していきます。以下の課題から選んで実装してみましょう。
 
-#### 🎯 課題1: 不審なログイン試行の検知
+#### 🎯 課題1: 継続的な認証攻撃の検知
 
-**目標**: 短時間に複数回ログインに失敗しているユーザーを検出する
+**シナリオ解説（初心者向け）**:
+認証攻撃とは、悪意のある攻撃者が正規ユーザーになりすまそうとする行為です。最も一般的な手法として「ブルートフォース攻撃」や「パスワードスプレー攻撃」があります。
 
-**検知したい状況**:
-- 同一ユーザーが5回以上ログインに失敗
-- 特定のIPアドレスから複数ユーザーへのログイン試行
-- 海外からのログイン失敗
+- **ブルートフォース攻撃**: 特定のユーザーに対して様々なパスワードを試す
+- **パスワードスプレー攻撃**: 複数のユーザーに対して一般的なパスワード（例: password123）を試す
+
+これらの攻撃は、短時間に大量の認証失敗を生み出すという特徴があります。
+
+**検知したい状況の詳細**:
+1. **攻撃の兆候**
+   - 同一のIPアドレスから5分以内に10回以上のログイン失敗
+   - 複数の異なるユーザーアカウントへの試行（パスワードスプレーの可能性）
+   - 通常の業務時間外でのアクセス試行
+
+2. **なぜこのパターンが危険か**
+   - 攻撃者がアカウントの乗っ取りを試みている可能性が高い
+   - 成功すれば組織の機密情報にアクセスされる恐れ
+   - 他の攻撃の前段階である可能性（偵察行為）
+
+3. **正常な行動との区別**
+   - 通常のユーザーは2-3回の失敗後にパスワードリセットを行う
+   - 同一IPから複数ユーザーへの認証試行は通常発生しない
 
 <details>
 <summary>💡 ヒント1: 使えそうなフィールド</summary>
 
 - `api.service.name = 'Google Identity'`: 認証サービス
 - `status_id = 2`: 失敗を表す
-- `actor.user.email_addr`: ユーザーメール
-- `src_endpoint.ip`: アクセス元IP
-- `src_endpoint.location.country`: アクセス元の国
+- `src_endpoint.ip`: 攻撃元IP
+- `actor.user.email_addr`: 標的となったユーザー
+- `time`: 時刻でのフィルタリング
 
 </details>
 
 <details>
-<summary>💡 ヒント2: SQLの構成</summary>
+<summary>💡 ヒント2: 時間窓の設定</summary>
 
-1. WHERE句で認証失敗を絞り込み
-2. GROUP BYでユーザーごとに集計
-3. HAVINGで回数の闾値を設定
-4. アラートに必要な情報をSELECT
+```sql
+-- 過去5分間のログを対象にする
+WHERE time >= (unix_timestamp() - 300) * 1000
+```
 
 </details>
-#### 🎯 課題2: 大量ファイルダウンロードの検知
 
-**目標**: 短時間に異常に多くのファイルをダウンロードしているユーザーを検出
+<details>
+<summary>💡 ヒント3: 攻撃パターンの特徴</summary>
 
-**検知したい状況**:
-- 1時間以内に50件以上のファイルダウンロード
-- 特定ユーザーの異常なダウンロードパターン
-- 深夜帯の大量ダウンロード
+1. 同一IPから複数ユーザーへの試行
+2. 短時間に高頻度の失敗
+3. IPアドレスごとにグループ化して集計
+
+</details>
+
+<details>
+<summary>✅ 回答例</summary>
+
+```sql
+SELECT 
+    src_endpoint.ip as attacker_ip,
+    COUNT(*) as failure_count,
+    COUNT(DISTINCT actor.user.email_addr) as target_users,
+    MIN(from_unixtime(time/1000)) as first_attempt,
+    MAX(from_unixtime(time/1000)) as last_attempt,
+    ARRAY_AGG(DISTINCT actor.user.email_addr) as targeted_users_list
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+    AND api.service.name = 'Google Identity'
+    AND status_id = 2
+    AND time >= (unix_timestamp() - 300) * 1000
+GROUP BY src_endpoint.ip
+HAVING COUNT(*) >= 10
+ORDER BY failure_count DESC;
+```
+
+</details>
+
+#### 🎯 課題2: 大量データ窃取の検知
+
+**シナリオ解説（初心者向け）**:
+データ窃取（Data Exfiltration）とは、組織の機密情報を不正に外部へ持ち出す行為です。内部犯行と外部からの侵入の両方で発生する可能性があります。
+
+典型的なデータ窃取の手口：
+- **一括ダウンロード**: 短時間で大量のファイルをダウンロード
+- **重要ファイルの選別**: 機密性の高いファイルを狙い撃ち
+- **時間外アクセス**: 監視が手薄な深夜や休日に実行
+
+**検知したい状況の詳細**:
+1. **異常なダウンロードパターン**
+   - 10分間で50件以上のファイルダウンロード（通常業務では考えられない量）
+   - 異なるフォルダやプロジェクトから無差別にファイルを収集
+   - 同一IPアドレスからの連続的なアクセス
+
+2. **なぜこのパターンが危険か**
+   - 機密情報の大量流出につながる可能性
+   - 競合他社への情報漏洩のリスク
+   - 個人情報保護法違反などコンプライアンス違反の恐れ
+   - 知的財産の損失による経済的損害
+
+3. **正常な行動との区別**
+   - 通常業務では必要なファイルを選択的にダウンロード
+   - プロジェクトメンバーは関連ファイルのみアクセス
+   - 大量ダウンロードが必要な場合は事前申請がある
 
 <details>
 <summary>💡 ヒント1: 使えそうなフィールド</summary>
 
 - `activity_id = 7`: ダウンロード操作
-- `web_resources[1].name`: ファイル名
-- `time`: 時刻（時間帯や期間での絞り込みに使用）
-- `EXTRACT(HOUR FROM from_unixtime(time/1000))`: 時間抽出
+- `actor.user.email_addr`: ダウンロードユーザー
+- `src_endpoint.ip`: アクセス元IP
+- `web_resources[1].name`: ダウンロードされたファイル
+- `time`: 時間フィルタリング
 
 </details>
 
 <details>
-<summary>💡 ヒント2: 時間フィルタの作り方</summary>
+<summary>💡 ヒント2: 異常なダウンロードパターン</summary>
+
+1. 短時間に大量のファイル
+2. 異なるディレクトリからのファイル収集
+3. 通常の業務パターンと異なる時間帯
+
+</details>
+
+<details>
+<summary>💡 ヒント3: 時間窓と集計</summary>
 
 ```sql
--- 過去1時間以内
-WHERE time >= (unix_timestamp() - 3600) * 1000
-
--- 特定の時間帯（日本時間の深夜）
-WHERE EXTRACT(HOUR FROM from_unixtime(time/1000) AT TIME ZONE 'Asia/Tokyo') 
-    BETWEEN 0 AND 6
+-- 過去10分間
+WHERE time >= (unix_timestamp() - 600) * 1000
+-- ユーザーとIPでグループ化
+GROUP BY actor.user.email_addr, src_endpoint.ip
 ```
 
 </details>
 
-#### 🎯 課題3: 異常なアクセス場所からのログイン
+<details>
+<summary>✅ 回答例</summary>
 
-**目標**: 通常と異なる場所からのアクセスを検出
+```sql
+SELECT 
+    actor.user.email_addr as user_email,
+    src_endpoint.ip as source_ip,
+    COUNT(*) as download_count,
+    COUNT(DISTINCT web_resources[1].name) as unique_files,
+    MIN(from_unixtime(time/1000)) as first_download,
+    MAX(from_unixtime(time/1000)) as last_download,
+    ARRAY_AGG(DISTINCT substr(web_resources[1].name, 1, 50)) as sample_files
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+    AND activity_id = 7
+    AND time >= (unix_timestamp() - 600) * 1000
+GROUP BY actor.user.email_addr, src_endpoint.ip
+HAVING COUNT(*) >= 50
+ORDER BY download_count DESC;
+```
 
-**検知したい状況**:
-- 日本以外からのアクセス
-- 同一ユーザーが短時間に複数国からアクセス
-- VPN/Tor経由の不審なアクセス
+</details>
+
+#### 🎯 課題3: 異常なサービスアクセスパターンの検知
+
+**シナリオ解説（初心者向け）**:
+攻撃者が組織のシステムに侵入した後、最初に行うのが「偵察活動」です。どのようなサービスやデータにアクセスできるかを探索し、価値の高い情報を見つけようとします。
+
+典型的な偵察活動のパターン：
+- **横展開（Lateral Movement）**: 侵入後、他のシステムやサービスへアクセスを試みる
+- **権限昇格の試み**: 管理者権限が必要なサービスへのアクセスを試行
+- **情報収集**: 様々なサービスを巡回して組織の構造を把握
+
+**検知したい状況の詳細**:
+1. **不審なアクセスパターン**
+   - 5分以内に3つ以上の異なるサービスへアクセス試行
+   - アクセス試行の70%以上が権限エラーで失敗
+   - 通常業務では使用しないサービスへのアクセス（特にAdmin系）
+
+2. **なぜこのパターンが危険か**
+   - 攻撃者が次の攻撃対象を探している可能性
+   - 権限昇格や横展開の前兆
+   - システム全体の脆弱性を探る偵察行為
+   - 成功すれば重要なシステムへの侵入につながる
+
+3. **正常な行動との区別**
+   - 通常のユーザーは自分の業務に必要なサービスのみ使用
+   - 権限エラーは稀にしか発生しない（設定ミス程度）
+   - 新しいサービスへのアクセスは段階的に増える
 
 <details>
-<summary>💡 ヒント1: 場所関連のフィールド</summary>
+<summary>💡 ヒント1: 使えそうなフィールド</summary>
 
-- `src_endpoint.location.country`: 国コード（JP, USなど）
-- `src_endpoint.location.city`: 都市名
+- `api.service.name`: アクセスされたサービス名
+- `status_id = 2`: アクセス失敗
+- `actor.user.email_addr`: アクセスユーザー
+- `api.operation`: 実行しようとした操作
+
+</details>
+
+<details>
+<summary>💡 ヒント2: 不審なアクセスパターン</summary>
+
+1. 異なるサービスへの短時間アクセス
+2. 高い失敗率（70%以上）
+3. 管理系サービスへのアクセス試行
+
+</details>
+
+<details>
+<summary>💡 ヒント3: サービス横断的な分析</summary>
+
+```sql
+-- サービスごとの成功/失敗を集計
+COUNT(DISTINCT api.service.name) as services_accessed
+SUM(CASE WHEN status_id = 2 THEN 1 ELSE 0 END) as failed_attempts
+```
+
+</details>
+
+<details>
+<summary>✅ 回答例</summary>
+
+```sql
+SELECT 
+    actor.user.email_addr as user_email,
+    COUNT(DISTINCT api.service.name) as services_accessed,
+    COUNT(*) as total_attempts,
+    SUM(CASE WHEN status_id = 2 THEN 1 ELSE 0 END) as failed_attempts,
+    CAST(SUM(CASE WHEN status_id = 2 THEN 1 ELSE 0 END) AS DOUBLE) / COUNT(*) as failure_rate,
+    ARRAY_AGG(DISTINCT api.service.name) as service_list,
+    MIN(from_unixtime(time/1000)) as first_attempt,
+    MAX(from_unixtime(time/1000)) as last_attempt
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+    AND time >= (unix_timestamp() - 300) * 1000
+GROUP BY actor.user.email_addr
+HAVING COUNT(DISTINCT api.service.name) >= 3
+    AND CAST(SUM(CASE WHEN status_id = 2 THEN 1 ELSE 0 END) AS DOUBLE) / COUNT(*) >= 0.7
+ORDER BY services_accessed DESC, failure_rate DESC;
+```
+
+</details>
+
+#### 🎯 課題4: 地理的に不可能なアクセスの検知
+
+**シナリオ解説（初心者向け）**:
+「不可能な移動（Impossible Travel）」は、アカウント乗っ取りを検知する重要な指標です。物理的に移動不可能な速度で異なる場所からアクセスがあった場合、それは同一ユーザーによるものではなく、攻撃者による不正アクセスの可能性が高いです。
+
+このような状況が発生する理由：
+- **盗まれた認証情報**: パスワードやトークンが漏洩し、攻撃者が別の場所から使用
+- **セッションハイジャック**: 正規ユーザーのセッションを攻撃者が乗っ取り
+- **多要素認証の回避**: 何らかの方法で認証を突破された
+
+**検知したい状況の詳細**:
+1. **物理的に不可能な移動パターン**
+   - 30分以内に異なる国（例：日本→アメリカ）からのアクセス
+   - 飛行機でも移動不可能な速度での地点間移動
+   - 同時刻に複数の地理的に離れた場所からのアクティビティ
+
+2. **なぜこのパターンが危険か**
+   - アカウントが確実に侵害されている証拠
+   - 攻撃者と正規ユーザーが同時にアクセスしている可能性
+   - 早急な対応をしないと被害が拡大する恐れ
+   - 多要素認証が突破されている可能性も示唆
+
+3. **正常な行動との区別**
+   - VPN使用時は事前に申請や設定がある
+   - 出張時は移動時間を考慮した妥当なアクセスパターン
+   - プロキシサービスの利用は組織ポリシーで制限
+
+4. **誤検知を避けるための考慮事項**
+   - VPNやプロキシサービスの正規利用
+   - クラウドサービスからの自動アクセス
+   - モバイルデバイスのローミング
+
+<details>
+<summary>💡 ヒント1: 使えそうなフィールド</summary>
+
+- `actor.user.email_addr`: ユーザー識別
+- `src_endpoint.location.country`: アクセス元の国
 - `src_endpoint.ip`: IPアドレス
+- `time`: アクセス時刻
 
 </details>
 
 <details>
-<summary>💡 ヒント2: 複数場所からのアクセス検出</summary>
+<summary>💡 ヒント2: 不可能な移動の判定</summary>
 
-1. ユーザーごとにアクセス元の国を集計
-2. COUNT(DISTINCT country)で複数国からのアクセスを検出
-3. 時間幅を考慮して「物理的に不可能」な移動を検出
-
-</details>
-
-#### 🎯 課題4: ファイル共有の異常パターン
-
-**目標**: 情報漏洩につながる可能性のあるファイル共有を検出
-
-**検知したい状況**:
-- 外部ドメインへの大量ファイル共有
-- 機密ファイルの外部共有
-- 短時間に多数のファイルを共有
-
-<details>
-<summary>💡 ヒント1: 共有関連のフィールド</summary>
-
-- `activity_id = 8`: 共有操作
-- `web_resources[1].name`: 共有されたファイル名
-- 共有先の情報はログ構造を確認して探してみましょう
+1. 30分以内に異なる国からアクセス
+2. 同じ時間帯に複数のIPアドレス
+3. 国コードの変化を検出
 
 </details>
 
-#### 🎯 課題5: アカウント乗っ取りの兆候
+<details>
+<summary>💡 ヒント3: 複数地点の検出</summary>
 
-**目標**: アカウントが乗っ取られた可能性を示すパターンを検出
+```sql
+-- ユーザーごとに国とIPを集計
+GROUP BY actor.user.email_addr
+HAVING COUNT(DISTINCT src_endpoint.location.country) >= 2
+```
 
-**検知したい状況**:
-- ログイン成功後の異常な活動
-- 通常と異なる時間帯のアクティビティ
-- 同時刻に複数地点からのアクセス
+</details>
 
 <details>
-<summary>💡 ヒント: 複合的な分析</summary>
+<summary>✅ 回答例</summary>
 
-1. ユーザーの通常の活動パターンを把握
-2. 通常と異なるパターンを検出
-3. 複数の指標を組み合わせて判定
+```sql
+SELECT 
+    actor.user.email_addr as user_email,
+    COUNT(DISTINCT src_endpoint.location.country) as country_count,
+    COUNT(DISTINCT src_endpoint.ip) as unique_ips,
+    COUNT(*) as total_access,
+    ARRAY_AGG(DISTINCT src_endpoint.location.country) as countries,
+    ARRAY_AGG(DISTINCT src_endpoint.ip) as ip_addresses,
+    MIN(from_unixtime(time/1000)) as first_access,
+    MAX(from_unixtime(time/1000)) as last_access,
+    time_diff('minute', 
+        MIN(from_unixtime(time/1000)), 
+        MAX(from_unixtime(time/1000))
+    ) as time_span_minutes
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+    AND time >= (unix_timestamp() - 1800) * 1000
+    AND src_endpoint.location.country IS NOT NULL
+GROUP BY actor.user.email_addr
+HAVING COUNT(DISTINCT src_endpoint.location.country) >= 2
+    AND time_diff('minute', 
+        MIN(from_unixtime(time/1000)), 
+        MAX(from_unixtime(time/1000))
+    ) <= 30
+ORDER BY country_count DESC, total_access DESC;
+```
 
 </details>
 
