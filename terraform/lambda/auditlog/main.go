@@ -145,15 +145,15 @@ func handler(ctx context.Context, request events.LambdaFunctionURLRequest) (even
 		return errorResponse(400, "endTime must be after startTime", headers)
 	}
 
-	// limit (オプション、デフォルト100、最大100)
+	// limit (オプション、デフォルト100、最大10000)
 	limit := 100
 	if limitStr := request.QueryStringParameters["limit"]; limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil {
 			if l <= 0 {
 				return errorResponse(400, "limit must be greater than 0", headers)
 			}
-			if l > 100 {
-				return errorResponse(400, "limit must not exceed 100", headers)
+			if l > 10000 {
+				return errorResponse(400, "limit must not exceed 10000", headers)
 			}
 			limit = l
 		} else {
