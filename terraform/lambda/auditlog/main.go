@@ -145,15 +145,15 @@ func handler(ctx context.Context, request events.LambdaFunctionURLRequest) (even
 		return errorResponse(400, "endTime must be after startTime", headers)
 	}
 
-	// limit (オプション、デフォルト100、最大10000)
+	// limit (オプション、デフォルト100、最大1000000)
 	limit := 100
 	if limitStr := request.QueryStringParameters["limit"]; limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil {
 			if l <= 0 {
 				return errorResponse(400, "limit must be greater than 0", headers)
 			}
-			if l > 10000 {
-				return errorResponse(400, "limit must not exceed 10000", headers)
+			if l > 1000000 {
+				return errorResponse(400, "limit must not exceed 1000000", headers)
 			}
 			limit = l
 		} else {
@@ -232,82 +232,74 @@ func generateLogs(ctx context.Context, startTime, endTime time.Time, limit, offs
 	// 設定読み込み
 	config := logcore.DefaultConfig()
 	generator := logcore.NewGenerator(config)
-	logger.Info("Config loaded and generator created")
+	logger.Info("Config loaded and generator created", "totalSeeds", len(dayTemplate.LogSeeds))
 
 	// 現在時刻を取得
 	now := time.Now()
 
-	// JSTタイムゾーン
-	jst, _ := time.LoadLocation("Asia/Tokyo")
 
-	// リクエストされた日付を取得
-	requestDate := time.Date(startTime.Year(), startTime.Month(), startTime.Day(), 0, 0, 0, 0, startTime.Location())
 
 	// 指定時間範囲内のログを生成
 	var allLogs []logcore.GoogleWorkspaceLogEntry
 
-	// シードデータを複数回使用して、時間範囲全体をカバー
-	duration := endTime.Sub(startTime)
-	secondsInRange := int(duration.Seconds())
-
-	// シードデータの全イベントタイプを収集
-	seedsByType := make(map[uint8][]logcore.LogSeed)
-	for _, seed := range dayTemplate.LogSeeds {
-		seedsByType[seed.EventType] = append(seedsByType[seed.EventType], seed)
+	// 時間範囲を0時からの秒数に変換
+	startSeconds := startTime.Hour()*3600 + startTime.Minute()*60 + startTime.Second()
+	endSeconds := endTime.Hour()*3600 + endTime.Minute()*60 + endTime.Second()
+	
+	// 日をまたぐ場合の処理
+	if endTime.Day() != startTime.Day() {
+		endSeconds += 86400 * int(endTime.Sub(startTime).Hours()/24)
 	}
+	
+	logger.Info("Time range conversion", 
+		"startTime", startTime,
+		"endTime", endTime,
+		"startSeconds", startSeconds,
+		"endSeconds", endSeconds,
+		"totalSeeds", len(dayTemplate.LogSeeds),
+	)
 
-	// 時間範囲内でログを生成（JST基準で分布を調整）
-	logIndex := 0
-	logInterval := 3 // 基本は3秒間隔
+	// 時間範囲に該当するシードをフィルタリング
+	var filteredSeeds []logcore.LogSeed
+	for _, seed := range dayTemplate.LogSeeds {
+		seedSecond := int(seed.Timestamp)
+		
+		// 日をまたぐ場合を考慮
+		if endSeconds > 86400 {
+			// 終了時刻が翌日の場合
+			if seedSecond >= startSeconds || seedSecond < (endSeconds % 86400) {
+				filteredSeeds = append(filteredSeeds, seed)
+			}
+		} else {
+			// 同じ日の範囲内
+			if seedSecond >= startSeconds && seedSecond < endSeconds {
+				filteredSeeds = append(filteredSeeds, seed)
+			}
+		}
+	}
+	
+	logger.Info("Filtered seeds", "count", len(filteredSeeds))
 
-	for seconds := 0; seconds < secondsInRange; seconds += logInterval {
-		logTime := startTime.Add(time.Duration(seconds) * time.Second)
-
+	// フィルタリングされたシードからログを生成
+	baseDate := time.Date(startTime.Year(), startTime.Month(), startTime.Day(), 0, 0, 0, 0, startTime.Location())
+	
+	for i, seed := range filteredSeeds {
+		// シードのタイムスタンプ（0時からの秒数）を実際の時刻に変換
+		logTime := baseDate.Add(time.Duration(seed.Timestamp) * time.Second)
+		
 		// 未来のログは除外
 		if logTime.After(now) {
 			break
 		}
-
-		// JST時刻を取得
-		jstTime := logTime.In(jst)
-		hour := jstTime.Hour()
-
-		// 時間帯別のイベントタイプ分布を決定
-		weights := getEventTypeWeights(hour)
-
-		// 重み付けに基づいてイベントタイプを選択
-		selectedType := selectEventTypeByWeight(weights, seconds)
-
-		if seeds, ok := seedsByType[selectedType]; ok && len(seeds) > 0 {
-			seedIndex := (seconds / logInterval) % len(seeds)
-			seed := seeds[seedIndex]
-
-			// 新しいシードを作成（タイムスタンプを調整）
-			adjustedSeed := seed
-			adjustedSeed.Timestamp = int64(seconds)
-
-			logEntry := generator.GenerateLogEntry(adjustedSeed, requestDate, logIndex)
-			logEntry.ID.Time = logTime.Format(time.RFC3339)
-			allLogs = append(allLogs, *logEntry)
-			logIndex++
-
-			// ログインイベントは時間帯によって頻度を調整
-			if selectedType == logcore.EventTypeLogin {
-				extraLogs := getExtraLoginLogs(hour)
-				for i := 0; i < extraLogs && seconds+i+1 < secondsInRange; i++ {
-					extraTime := startTime.Add(time.Duration(seconds+i+1) * time.Second)
-					if extraTime.After(now) {
-						break
-					}
-					extraSeed := seed
-					extraSeed.Timestamp = int64(seconds + i + 1)
-					extraEntry := generator.GenerateLogEntry(extraSeed, requestDate, logIndex)
-					extraEntry.ID.Time = extraTime.Format(time.RFC3339)
-					allLogs = append(allLogs, *extraEntry)
-					logIndex++
-				}
-			}
+		
+		// 範囲外のログはスキップ（念のため）
+		if logTime.Before(startTime) || logTime.After(endTime) {
+			continue
 		}
+		
+		logEntry := generator.GenerateLogEntry(seed, baseDate, i)
+		logEntry.ID.Time = logTime.Format(time.RFC3339)
+		allLogs = append(allLogs, *logEntry)
 	}
 
 	total := len(allLogs)
@@ -328,87 +320,8 @@ func generateLogs(ctx context.Context, startTime, endTime time.Time, limit, offs
 	return allLogs[start:end], total, nil
 }
 
-// JST時間帯別のイベントタイプ重み付け
-func getEventTypeWeights(hour int) map[uint8]float64 {
-	weights := make(map[uint8]float64)
 
-	switch {
-	case hour >= 0 && hour < 6: // 深夜〜早朝
-		weights[logcore.EventTypeDriveAccess] = 0.05
-		weights[logcore.EventTypeLogin] = 0.85 // ログインが多い（システムバッチ等）
-		weights[logcore.EventTypeAdmin] = 0.05
-		weights[logcore.EventTypeCalendar] = 0.05
 
-	case hour >= 6 && hour < 9: // 朝（出勤時間）
-		weights[logcore.EventTypeDriveAccess] = 0.15
-		weights[logcore.EventTypeLogin] = 0.70 // 出勤時のログインが多い
-		weights[logcore.EventTypeAdmin] = 0.05
-		weights[logcore.EventTypeCalendar] = 0.10
-
-	case hour >= 9 && hour < 12: // 午前（業務時間）
-		weights[logcore.EventTypeDriveAccess] = 0.50 // 業務でDrive利用が活発
-		weights[logcore.EventTypeLogin] = 0.15
-		weights[logcore.EventTypeAdmin] = 0.15
-		weights[logcore.EventTypeCalendar] = 0.20
-
-	case hour >= 12 && hour < 13: // 昼休み
-		weights[logcore.EventTypeDriveAccess] = 0.30
-		weights[logcore.EventTypeLogin] = 0.40 // 昼休み後の再ログイン
-		weights[logcore.EventTypeAdmin] = 0.10
-		weights[logcore.EventTypeCalendar] = 0.20
-
-	case hour >= 13 && hour < 18: // 午後（業務時間）
-		weights[logcore.EventTypeDriveAccess] = 0.55 // 最も活発な時間帯
-		weights[logcore.EventTypeLogin] = 0.10
-		weights[logcore.EventTypeAdmin] = 0.15
-		weights[logcore.EventTypeCalendar] = 0.20
-
-	case hour >= 18 && hour < 21: // 夕方〜夜（残業時間）
-		weights[logcore.EventTypeDriveAccess] = 0.35
-		weights[logcore.EventTypeLogin] = 0.30 // 残業のための再ログイン
-		weights[logcore.EventTypeAdmin] = 0.20 // 管理作業が増える
-		weights[logcore.EventTypeCalendar] = 0.15
-
-	default: // 21時以降
-		weights[logcore.EventTypeDriveAccess] = 0.15
-		weights[logcore.EventTypeLogin] = 0.60 // 深夜作業のログイン
-		weights[logcore.EventTypeAdmin] = 0.20 // メンテナンス作業
-		weights[logcore.EventTypeCalendar] = 0.05
-	}
-
-	return weights
-}
-
-// 重み付けに基づいてイベントタイプを選択
-func selectEventTypeByWeight(weights map[uint8]float64, seed int) uint8 {
-	// シード値から疑似乱数を生成
-	rand := float64((seed*1103515245+12345)%100) / 100.0
-
-	cumulative := 0.0
-	for eventType, weight := range weights {
-		cumulative += weight
-		if rand < cumulative {
-			return eventType
-		}
-	}
-
-	// デフォルトはDriveAccess
-	return logcore.EventTypeDriveAccess
-}
-
-// 時間帯に応じた追加ログイン数
-func getExtraLoginLogs(hour int) int {
-	switch {
-	case hour >= 6 && hour < 9: // 朝の出勤時
-		return 2
-	case hour >= 12 && hour < 13: // 昼休み後
-		return 1
-	case hour >= 0 && hour < 6: // 深夜バッチ
-		return 3
-	default:
-		return 0
-	}
-}
 
 // getSeedData はキャッシュまたはS3からseedデータを取得する
 func getSeedData(ctx context.Context) ([]byte, error) {

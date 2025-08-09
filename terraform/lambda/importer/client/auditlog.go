@@ -112,7 +112,7 @@ func (c *AuditlogClient) FetchLogs(ctx context.Context, startTime, endTime time.
 func (c *AuditlogClient) FetchAllLogs(ctx context.Context, startTime, endTime time.Time) ([]LogEntry, error) {
 	var allLogs []LogEntry
 	offset := 0
-	limit := 100
+	limit := 10000
 
 	for {
 		resp, err := c.FetchLogs(ctx, startTime, endTime, offset, limit)

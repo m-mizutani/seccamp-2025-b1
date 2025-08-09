@@ -137,7 +137,7 @@ resource "aws_lambda_function" "converter" {
   runtime          = "provided.al2"
   architectures    = ["arm64"]
   timeout          = 300
-  memory_size      = 512
+  memory_size      = 1024
 
   environment {
     variables = {
@@ -281,8 +281,8 @@ resource "aws_lambda_function" "auditlog" {
   source_code_hash = data.archive_file.auditlog_lambda_zip.output_base64sha256
   runtime          = "provided.al2"
   architectures    = ["arm64"]
-  timeout          = 30
-  memory_size      = 1024
+  timeout          = 60
+  memory_size      = 2048
 
   environment {
     variables = {
@@ -368,7 +368,7 @@ resource "aws_lambda_function" "importer" {
   runtime          = "provided.al2"
   architectures    = ["arm64"]
   timeout          = 300
-  memory_size      = 512
+  memory_size      = 1024
 
   environment {
     variables = {

@@ -138,6 +138,11 @@ func (g *Generator) GenerateDayTemplate(date time.Time, anomalyRatio float64) (*
 				seed.EventType, seed.UserIndex, seed.ResourceIdx = g.selectActivityPattern(currentTime, i)
 			}
 
+			// 正常パターンのログは50%の確率でスキップ（異常パターンは必ず追加）
+			if seed.Pattern == logcore.PatternNormal && rand.Float64() < 0.5 {
+				continue
+			}
+
 			template.LogSeeds = append(template.LogSeeds, seed)
 		}
 	}
