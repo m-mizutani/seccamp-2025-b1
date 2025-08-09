@@ -136,7 +136,7 @@ GitHubのWebサイトでPull Requestを作成します。
 
 ##### 6-1. GitHub Actionsでデプロイ状況を確認
 
-1. GitHubのリポジトリページ（https://github.com/seccamp2025-b/b1-secmon）を開く
+1. GitHubのリポジトリページ ( https://github.com/seccamp2025-b/b1-secmon ) を開く
 2. 「Actions」タブをクリック
 3. 最新のワークフロー実行を確認：
    - **緑のチェックマーク ✓**: デプロイ成功
@@ -310,7 +310,7 @@ GitHub Actions のログで以下を確認：
 
 2. **アラートメッセージ**
    - トリアージに必要な情報を含める
-   - 誤検知を減らすため、閾値は慎重に設定
+   - 誤検知を減らすため、条件や閾値は慎重に設定
 
 3. **パフォーマンス**
    - クエリは必要最小限のデータを取得
@@ -322,132 +322,213 @@ GitHub Actions のログで以下を確認：
 
 ## 検知ルールの作成
 
+検知ルールを作成し、定期実行される（想定の）Lambda関数に組み込み、検知システムを完成させます。SQLによって発見された事象をアラートとして発報する際、アラートを調査する担当者の行動をイメージして必要な情報を報告することが重要です。
+
+### 調査のためにアラートに含めるべき情報
+
+基本的には5W(1H)を抑える形式が望ましいです。そこからさらに調査の足がかりになるような情報を付与できるとよいでしょう。
+
+- Who: そのアラートを発生させた主体（principle, subject）
+  - ユーザID: 認証が済んでいるシステムならユーザ名があるとよいでしょう
+  - IPアドレス: リモートからのアクセスにおいて利用価値のある識別情報です
+- What: どのリソースに対してのアクセス、あるいは攻撃だったか
+  - 今回だと対象となるドキュメントであったり、ログイン試行なら対象ユーザIDなどが相当します
+- When: 検知をした時刻だけでなく、検知対象となったイベントが発生した時刻がより重要である点に注意です
+- Where: 今回はGoogle Workspaceなのでそのサービス内であることは自明ですが、例えばkubernetesのようなシステムではどのPod、Nodeで発生した事象なのかという情報は重要になります
+
+このほか、IoC（Indicator of Compromise）になりそうな情報や、アラートの概況（特に複数アラートを束ねる場合）を伝える情報を組み込むのが良いでしょう。
+
 ### 検知ルールの作成課題
 
 ここからは、実際にセキュリティイベントを検知するSQLクエリを作成していきます。以下の課題から選んで実装してみましょう。
 
-#### 🎯 課題1: 不審なログイン試行の検知
+#### 🎯 課題1: 夜間の大量ダウンロード検知
 
-**目標**: 短時間に複数回ログインに失敗しているユーザーを検出する
+**目標**: 深夜から早朝にかけて管理者権限を持つユーザーが大量のファイルをダウンロードする異常パターンを検出する
 
 **検知したい状況**:
-- 同一ユーザーが5回以上ログインに失敗
-- 特定のIPアドレスから複数ユーザーへのログイン試行
-- 海外からのログイン失敗
+- 18:00から翌9:00の間のアクティビティ
+- 管理者ロールを持つユーザーによる操作
+- 短時間に複数のファイルダウンロード
 
 <details>
 <summary>💡 ヒント1: 使えそうなフィールド</summary>
 
-- `api.service.name = 'Google Identity'`: 認証サービス
-- `status_id = 2`: 失敗を表す
-- `actor.user.email_addr`: ユーザーメール
-- `src_endpoint.ip`: アクセス元IP
-- `src_endpoint.location.country`: アクセス元の国
+- `activity_id = 7`: ダウンロード操作
+- `actor.user.email_addr`: ユーザーメール（adminを含むメールアドレス）
+- `EXTRACT(HOUR FROM from_unixtime(time/1000))`: 時間抽出（UTC）
+- `web_resources[1].name`: ダウンロードされたファイル名
 
 </details>
 
 <details>
 <summary>💡 ヒント2: SQLの構成</summary>
 
-1. WHERE句で認証失敗を絞り込み
-2. GROUP BYでユーザーごとに集計
-3. HAVINGで回数の闾値を設定
-4. アラートに必要な情報をSELECT
-
-</details>
-#### 🎯 課題2: 大量ファイルダウンロードの検知
-
-**目標**: 短時間に異常に多くのファイルをダウンロードしているユーザーを検出
-
-**検知したい状況**:
-- 1時間以内に50件以上のファイルダウンロード
-- 特定ユーザーの異常なダウンロードパターン
-- 深夜帯の大量ダウンロード
-
-<details>
-<summary>💡 ヒント1: 使えそうなフィールド</summary>
-
-- `activity_id = 7`: ダウンロード操作
-- `web_resources[1].name`: ファイル名
-- `time`: 時刻（時間帯や期間での絞り込みに使用）
-- `EXTRACT(HOUR FROM from_unixtime(time/1000))`: 時間抽出
+1. WHERE句で時間帯とダウンロード操作を絞り込み
+2. adminユーザーの特定（メールアドレスにadminを含む）
+3. GROUP BYでユーザーごとに集計
+4. 時間帯の条件は `HOUR >= 18 OR HOUR <= 9` で指定
 
 </details>
 
 <details>
-<summary>💡 ヒント2: 時間フィルタの作り方</summary>
+<summary>💡 ヒント3: 時間帯の判定</summary>
 
 ```sql
--- 過去1時間以内
-WHERE time >= (unix_timestamp() - 3600) * 1000
-
--- 特定の時間帯（日本時間の深夜）
-WHERE EXTRACT(HOUR FROM from_unixtime(time/1000) AT TIME ZONE 'Asia/Tokyo') 
-    BETWEEN 0 AND 6
+-- UTC時間での18:00-9:00の判定
+WHERE EXTRACT(HOUR FROM from_unixtime(time/1000)) >= 18 
+   OR EXTRACT(HOUR FROM from_unixtime(time/1000)) <= 9
 ```
 
 </details>
 
-#### 🎯 課題3: 異常なアクセス場所からのログイン
+<details>
+<summary>✅ 回答例</summary>
 
-**目標**: 通常と異なる場所からのアクセスを検出
+```sql
+SELECT 
+    actor.user.email_addr as user_email,
+    COUNT(*) as download_count,
+    COUNT(DISTINCT web_resources[1].name) as unique_files,
+    MIN(from_unixtime(time/1000)) as first_download,
+    MAX(from_unixtime(time/1000)) as last_download,
+    ARRAY_AGG(DISTINCT web_resources[1].name) as file_list
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+    AND activity_id = 7
+    AND actor.user.email_addr LIKE '%admin%'
+    AND (EXTRACT(HOUR FROM from_unixtime(time/1000)) >= 18 
+         OR EXTRACT(HOUR FROM from_unixtime(time/1000)) <= 9)
+GROUP BY actor.user.email_addr
+HAVING COUNT(*) >= 5
+ORDER BY download_count DESC;
+```
+
+</details>
+
+#### 🎯 課題2: 外部リンクへのバーストアクセス検知
+
+**目標**: 外部公開設定（anyone with link）されたファイルへの短時間での集中的なアクセスを検出
 
 **検知したい状況**:
-- 日本以外からのアクセス
-- 同一ユーザーが短時間に複数国からアクセス
-- VPN/Tor経由の不審なアクセス
+- 10:00-16:00の業務時間帯
+- 15分間隔でのバーストパターン（自動化されたアクセスの可能性）
+- 外部ユーザーまたは異常なIPからのアクセス
 
 <details>
-<summary>💡 ヒント1: 場所関連のフィールド</summary>
+<summary>💡 ヒント1: 使えそうなフィールド</summary>
 
-- `src_endpoint.location.country`: 国コード（JP, USなど）
-- `src_endpoint.location.city`: 都市名
-- `src_endpoint.ip`: IPアドレス
+- `activity_id = 2`: 読み取り操作
+- `actor.user.type_id`: ユーザータイプ（99=外部ユーザー）
+- `time`: アクセス時刻（分単位での集計に使用）
+- `src_endpoint.ip`: アクセス元IP
 
 </details>
 
 <details>
-<summary>💡 ヒント2: 複数場所からのアクセス検出</summary>
+<summary>💡 ヒント2: 時間窓での集計</summary>
 
-1. ユーザーごとにアクセス元の国を集計
-2. COUNT(DISTINCT country)で複数国からのアクセスを検出
-3. 時間幅を考慮して「物理的に不可能」な移動を検出
-
-</details>
-
-#### 🎯 課題4: ファイル共有の異常パターン
-
-**目標**: 情報漏洩につながる可能性のあるファイル共有を検出
-
-**検知したい状況**:
-- 外部ドメインへの大量ファイル共有
-- 機密ファイルの外部共有
-- 短時間に多数のファイルを共有
-
-<details>
-<summary>💡 ヒント1: 共有関連のフィールド</summary>
-
-- `activity_id = 8`: 共有操作
-- `web_resources[1].name`: 共有されたファイル名
-- 共有先の情報はログ構造を確認して探してみましょう
+```sql
+-- 15分単位での集計例
+date_trunc('minute', from_unixtime(time/1000)) - 
+    interval '1' minute * (minute(from_unixtime(time/1000)) % 15)
+```
 
 </details>
 
-#### 🎯 課題5: アカウント乗っ取りの兆候
+<details>
+<summary>💡 ヒント3: バーストパターンの検出</summary>
 
-**目標**: アカウントが乗っ取られた可能性を示すパターンを検出
+1. 15分単位で時間を区切る
+2. 各時間窓でのアクセス数を集計
+3. 短時間での異常なアクセス集中を検出
 
-**検知したい状況**:
-- ログイン成功後の異常な活動
-- 通常と異なる時間帯のアクティビティ
-- 同時刻に複数地点からのアクセス
+</details>
 
 <details>
-<summary>💡 ヒント: 複合的な分析</summary>
+<summary>✅ 回答例</summary>
 
-1. ユーザーの通常の活動パターンを把握
-2. 通常と異なるパターンを検出
-3. 複数の指標を組み合わせて判定
+```sql
+SELECT 
+    date_format(from_unixtime(time/1000), '%Y-%m-%d %H:%i') as time_window,
+    COUNT(*) as access_count,
+    COUNT(DISTINCT src_endpoint.ip) as unique_ips,
+    COUNT(DISTINCT actor.user.email_addr) as unique_users,
+    ARRAY_AGG(DISTINCT web_resources[1].name) as accessed_files
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+    AND activity_id = 2
+    AND EXTRACT(HOUR FROM from_unixtime(time/1000)) BETWEEN 10 AND 16
+    AND (actor.user.type_id = 99 OR actor.user.email_addr LIKE '%external%')
+GROUP BY date_format(from_unixtime(time/1000), '%Y-%m-%d %H:%i')
+HAVING COUNT(*) >= 20
+ORDER BY time_window DESC;
+```
+
+</details>
+
+#### 🎯 課題3: VPN経由の水平移動攻撃検知
+
+**目標**: VPN接続元からの異常なリソースアクセスパターン（水平移動の兆候）を検出
+
+**検知したい状況**:
+- 9:00-18:00の業務時間内
+- VPN経由のアクセス（IPアドレスパターンで判定）
+- 短時間に複数の異なるリソースへアクセス
+
+<details>
+<summary>💡 ヒント1: 使えそうなフィールド</summary>
+
+- `src_endpoint.ip`: VPN IPアドレスの特定
+- `web_resources[1].name`: アクセスされたリソース
+- `api.operation`: 実行された操作
+- VPNユーザーの特定方法を考えてみましょう
+
+</details>
+
+<details>
+<summary>💡 ヒント2: 水平移動の特徴</summary>
+
+1. 短時間に多くの異なるリソースにアクセス
+2. 通常とは異なるアクセスパターン
+3. 複数のサービスやファイルを横断的に探索
+
+</details>
+
+<details>
+<summary>💡 ヒント3: VPNアクセスの判定</summary>
+
+- 特定のIPレンジ（10.x.x.x, 172.16-31.x.x, 192.168.x.x）
+- または特定のlocationパターン
+- emailアドレスにvpnを含むユーザー
+
+</details>
+
+<details>
+<summary>✅ 回答例</summary>
+
+```sql
+SELECT 
+    actor.user.email_addr as user_email,
+    src_endpoint.ip as source_ip,
+    COUNT(DISTINCT web_resources[1].name) as unique_resources,
+    COUNT(DISTINCT api.operation) as unique_operations,
+    COUNT(*) as total_access,
+    MIN(from_unixtime(time/1000)) as first_access,
+    MAX(from_unixtime(time/1000)) as last_access,
+    ARRAY_AGG(DISTINCT web_resources[1].name) as resource_list
+FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+WHERE eventday = date_format(current_date, '%Y%m%d')
+    AND EXTRACT(HOUR FROM from_unixtime(time/1000)) BETWEEN 9 AND 18
+    AND (src_endpoint.ip LIKE '10.%' 
+         OR src_endpoint.ip LIKE '172.%' 
+         OR src_endpoint.ip LIKE '192.168.%'
+         OR actor.user.email_addr LIKE '%vpn%')
+GROUP BY actor.user.email_addr, src_endpoint.ip
+HAVING COUNT(DISTINCT web_resources[1].name) >= 10
+    AND time_diff('minute', MIN(from_unixtime(time/1000)), MAX(from_unixtime(time/1000))) <= 30
+ORDER BY unique_resources DESC;
+```
 
 </details>
 
