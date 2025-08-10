@@ -128,9 +128,9 @@ func TestGenerateOCSFParquetFile_ValidData(t *testing.T) {
 				IP       string `parquet:"ip"`
 				Hostname string `parquet:"hostname,optional"`
 				Location struct {
-					Country string `parquet:"country,optional"`
-					Region  string `parquet:"src_region,optional"`
 					City    string `parquet:"city,optional"`
+					Country string `parquet:"country,optional"`
+					Region  string `parquet:"region,optional"`
 				} `parquet:"location,optional"`
 			}{
 				IP: "192.168.1.100",
@@ -181,9 +181,9 @@ func TestGenerateOCSFParquetFile_ValidData(t *testing.T) {
 				IP       string `parquet:"ip"`
 				Hostname string `parquet:"hostname,optional"`
 				Location struct {
-					Country string `parquet:"country,optional"`
-					Region  string `parquet:"src_region,optional"`
 					City    string `parquet:"city,optional"`
+					Country string `parquet:"country,optional"`
+					Region  string `parquet:"region,optional"`
 				} `parquet:"location,optional"`
 			}{
 				IP: "192.168.1.101",
@@ -264,9 +264,9 @@ func TestGenerateOCSFParquetFile_SchemaValidation(t *testing.T) {
 				IP       string `parquet:"ip"`
 				Hostname string `parquet:"hostname,optional"`
 				Location struct {
-					Country string `parquet:"country,optional"`
-					Region  string `parquet:"src_region,optional"`
 					City    string `parquet:"city,optional"`
+					Country string `parquet:"country,optional"`
+					Region  string `parquet:"region,optional"`
 				} `parquet:"location,optional"`
 			}{
 				IP: "255.255.255.255",

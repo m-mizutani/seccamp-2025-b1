@@ -97,9 +97,9 @@ type OCSFWebResourceActivity struct {
 		IP       string `parquet:"ip"`
 		Hostname string `parquet:"hostname,optional"`
 		Location struct {
-			Country string `parquet:"country,optional"`
-			Region  string `parquet:"src_region,optional"`
 			City    string `parquet:"city,optional"`
+			Country string `parquet:"country,optional"`
+			Region  string `parquet:"region,optional"`
 		} `parquet:"location,optional"`
 	} `parquet:"src_endpoint"`
 

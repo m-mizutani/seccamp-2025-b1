@@ -71,9 +71,9 @@ func buildOCSFSchema() *arrow.Schema {
 			arrow.Field{Name: "ip", Type: arrow.BinaryTypes.String},
 			arrow.Field{Name: "hostname", Type: arrow.BinaryTypes.String, Nullable: true},
 			arrow.Field{Name: "location", Type: arrow.StructOf(
-				arrow.Field{Name: "country", Type: arrow.BinaryTypes.String, Nullable: true},
-				arrow.Field{Name: "src_region", Type: arrow.BinaryTypes.String, Nullable: true},
 				arrow.Field{Name: "city", Type: arrow.BinaryTypes.String, Nullable: true},
+				arrow.Field{Name: "country", Type: arrow.BinaryTypes.String, Nullable: true},
+				arrow.Field{Name: "region", Type: arrow.BinaryTypes.String, Nullable: true},
 			), Nullable: true},
 		)},
 		{Name: "web_resources", Type: arrow.ListOf(arrow.StructOf(
