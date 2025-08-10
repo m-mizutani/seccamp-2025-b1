@@ -110,6 +110,13 @@ func generateUsers() []User {
 	}
 	users = append(users, externalUsers...)
 
+	// 攻撃対象専用ユーザー（Pattern 6用）
+	attackTargetUsers := []User{
+		{Email: "takano.masaki@muhaijuku.com", ProfileID: "114511147312345671006", Role: "compromised"},
+		{Email: "ishida.kaori@muhaijuku.com", ProfileID: "114511147312345671007", Role: "compromised"},
+	}
+	users = append(users, attackTargetUsers...)
+
 	return users
 }
 

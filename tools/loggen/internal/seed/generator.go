@@ -308,15 +308,18 @@ func (g *Generator) weightedSelect(rng *rand.Rand, weights map[uint8]int) uint8 
 // ユーザー選択
 func (g *Generator) selectUser(rng *rand.Rand, hour int) uint8 {
 	userCount := len(g.config.Users)
+	
+	// 攻撃対象専用ユーザー（最後の2人）は通常のアクティビティから除外
+	normalUserCount := userCount - 2
 
 	// 時間帯によるユーザー活動確率調整
 	if hour >= 9 && hour <= 18 {
-		// 業務時間内は内部ユーザーが多い
-		return uint8(rng.Intn(userCount - 2)) // 外部ユーザー除外
+		// 業務時間内は内部ユーザーが多い（外部ユーザーと攻撃対象ユーザーを除外）
+		return uint8(rng.Intn(normalUserCount - 5)) // 外部ユーザー5人も除外
 	}
 
-	// その他の時間は全ユーザー
-	return uint8(rng.Intn(userCount))
+	// その他の時間は通常ユーザー（攻撃対象ユーザーは除外）
+	return uint8(rng.Intn(normalUserCount))
 }
 
 // リソース選択
@@ -508,8 +511,13 @@ func (g *Generator) generatePattern6ServiceProbing(t time.Time, sequence int) (u
 	eventType := serviceTypes[g.serviceProbingState.currentIndex]
 	g.serviceProbingState.currentIndex = (g.serviceProbingState.currentIndex + 1) % len(serviceTypes)
 	
-	// 特定の感染ユーザー
-	userIndex := uint8(3) // sato.yuki@muhaijuku.com (index 3)
+	// 攻撃対象専用ユーザーをランダムに選択（最後の2人）
+	totalUsers := len(g.config.Users)
+	compromisedUserIndices := []uint8{
+		uint8(totalUsers - 2), // takano.masaki@muhaijuku.com
+		uint8(totalUsers - 1), // ishida.kaori@muhaijuku.com
+	}
+	userIndex := compromisedUserIndices[rand.Intn(len(compromisedUserIndices))]
 	
 	// リソースはサービスに応じて選択
 	resourceIndex := uint8(rand.Intn(10))

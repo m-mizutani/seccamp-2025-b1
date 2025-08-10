@@ -9,7 +9,7 @@
 - [04. Security Lake概要とデータスキーマ理解](./docs/04_security_lake_overview_and_data_schema.md)
 - [05. 探索的ログ分析とOCSFスキーマ理解](./docs/05_detection_rules_and_alerts.md)
 - [06. Lambda実装と検知ルール作成](./docs/06_lambda_implementation_and_detection_rules.md)
-- [07. アラート処理と実装結果共有](./docs/07_alert_handling.md)
+- [07. 検知したアラートの対応](./docs/07_alert_handling.md)
 - [99. 終わりに](./docs/99_wrap_up.md)
 
 ## 講義について

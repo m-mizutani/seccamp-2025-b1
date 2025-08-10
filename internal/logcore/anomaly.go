@@ -320,16 +320,20 @@ func generateExample5RapidDataTheft(base *GoogleWorkspaceLogEntry, rng *rand.Ran
 
 // Pattern 6: マルチサービス不正アクセス試行
 func generateExample6MultiServiceProbing(base *GoogleWorkspaceLogEntry, rng *rand.Rand) *GoogleWorkspaceLogEntry {
-	// 特定の感染ユーザー
-	base.Actor.Email = "sato.yuki@muhaijuku.com"
+	// 攻撃対象専用ユーザーをランダムに選択
+	compromisedUsers := []string{
+		"takano.masaki@muhaijuku.com",
+		"ishida.kaori@muhaijuku.com",
+	}
+	base.Actor.Email = compromisedUsers[rng.Intn(len(compromisedUsers))]
 	
 	// サービスをランダムに選択
 	services := []string{"drive", "calendar", "gmail", "admin"}
 	selectedService := services[rng.Intn(len(services))]
 	base.ID.ApplicationName = selectedService
 	
-	// 80%は権限エラー（検知閾値70%を確実に超えるため）
-	if rng.Float32() < 0.8 {
+	// 85%は権限エラー（検知閾値70%を確実に超えるため、マージンを持たせる）
+	if rng.Float32() < 0.85 {
 		switch selectedService {
 		case "drive":
 			base.Events = []Event{
