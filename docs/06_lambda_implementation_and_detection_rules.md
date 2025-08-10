@@ -1,6 +1,6 @@
 # Lambda実装と検知ルール作成
 
-**時間：11:00-11:50 (50分)**
+**時間：11:05-12:05 (60分)**
 
 ## 概要
 
@@ -721,7 +721,6 @@ HAVING COUNT(DISTINCT src_endpoint.location.country) >= 2
 
 ```sql
 WITH user_access_locations AS (
-    -- 過去30分間のユーザーアクセスと位置情報を抽出
     SELECT 
         actor.user.email_addr,
         src_endpoint.ip,
@@ -729,7 +728,7 @@ WITH user_access_locations AS (
         from_unixtime(time/1000) as access_time
     FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
     WHERE eventday = date_format(current_date, '%Y%m%d')
-        AND time >= (to_unixtime(current_timestamp) - 1800) * 1000  -- 過去30分間
+        AND time >= (to_unixtime(current_timestamp) - 1800) * 1000
         AND src_endpoint.location.country IS NOT NULL
 ),
 user_location_summary AS (
