@@ -1,12 +1,26 @@
 # セキュリティ・キャンプ2025 全国大会 B1『クラウドプラットフォーム監視入門』
 
+## 講義資料
+
+- [00. 導入・概要](./docs/00_intro.md)
+- [01. クラウド環境でもセキュリティ監視が必要な理由](./docs/01_cloud_security_challenges.md)
+- [02. クラウドセキュリティサービスとカスタム検知戦略](./docs/02_managed_services_and_custom_detection.md)
+- [03. セキュリティ監視基盤の統合と段階的構築](./docs/03_unified_security_monitoring_platform.md)
+- [04. Security Lake概要とデータスキーマ理解](./docs/04_security_lake_overview_and_data_schema.md)
+- [05. 探索的ログ分析とOCSFスキーマ理解](./docs/05_detection_rules_and_alerts.md)
+- [06. Lambda実装と検知ルール作成](./docs/06_lambda_implementation_and_detection_rules.md)
+- [07. アラート処理と実装結果共有](./docs/07_alert_handling.md)
+- [99. 終わりに](./docs/99_wrap_up.md)
+
+## 講義について
+
 https://www.ipa.go.jp/jinzai/security-camp/2025/camp/zenkoku/program/b.html
 
-## 日程
+### 日程
 
 8月12日（火曜日） 8時30分～12時30分
 
-## 講義概要
+### 講義概要
 
 クラウドプラットフォームはリソース構成の自由度が高く、素早く柔軟にサービスを提供したい人にとっては強い武器になる反面、その自由度故に脆弱な構成になりやすい側面もあります。また、クラウドサービスを活用したプロダクト開発は便利な半面、サプライチェーン攻撃などをうける脆弱さもあります。本講義ではこれらの対策の一つであるセキュリティ監視について学びます。
 
@@ -14,7 +28,7 @@ https://www.ipa.go.jp/jinzai/security-camp/2025/camp/zenkoku/program/b.html
 
 後半では実際にセキュリティ監視のための機能を構築する実習に取り組みます。実際にクラウドプラットフォーム上でセキュリティ監視の基本であるログの収集、保全、管理、検知を簡易的なセキュリティ監視基盤を構築します。セキュリティ監視は組織の成熟度に応じて取り組み方や規模が変化するため、今回は組織が小さい段階からどのような取り組みができるかを順を追って体験できるようにしたいと考えています。
 
-## 関連資料
+### 関連資料
 
 - [事前準備](./preparation.md)
 - [講義概略](./outline.md)
