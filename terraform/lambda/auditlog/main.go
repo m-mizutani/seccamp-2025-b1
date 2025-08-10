@@ -22,7 +22,7 @@ import (
 	"github.com/m-mizutani/seccamp-2025-b1/internal/logcore"
 )
 
-// tomb
+// hook
 
 // 埋め込まれたシードファイル（バイナリ圧縮形式）
 // S3アクセスに失敗した場合のフォールバックとして保持
@@ -237,21 +237,19 @@ func generateLogs(ctx context.Context, startTime, endTime time.Time, limit, offs
 	// 現在時刻を取得
 	now := time.Now()
 
-
-
 	// 指定時間範囲内のログを生成
 	var allLogs []logcore.GoogleWorkspaceLogEntry
 
 	// 時間範囲を0時からの秒数に変換
 	startSeconds := startTime.Hour()*3600 + startTime.Minute()*60 + startTime.Second()
 	endSeconds := endTime.Hour()*3600 + endTime.Minute()*60 + endTime.Second()
-	
+
 	// 日をまたぐ場合の処理
 	if endTime.Day() != startTime.Day() {
 		endSeconds += 86400 * int(endTime.Sub(startTime).Hours()/24)
 	}
-	
-	logger.Info("Time range conversion", 
+
+	logger.Info("Time range conversion",
 		"startTime", startTime,
 		"endTime", endTime,
 		"startSeconds", startSeconds,
@@ -263,11 +261,11 @@ func generateLogs(ctx context.Context, startTime, endTime time.Time, limit, offs
 	var filteredSeeds []logcore.LogSeed
 	for _, seed := range dayTemplate.LogSeeds {
 		seedSecond := int(seed.Timestamp)
-		
+
 		// 日をまたぐ場合を考慮
 		if endSeconds > 86400 {
 			// 終了時刻が翌日の場合
-			if seedSecond >= startSeconds || seedSecond < (endSeconds % 86400) {
+			if seedSecond >= startSeconds || seedSecond < (endSeconds%86400) {
 				filteredSeeds = append(filteredSeeds, seed)
 			}
 		} else {
@@ -277,26 +275,26 @@ func generateLogs(ctx context.Context, startTime, endTime time.Time, limit, offs
 			}
 		}
 	}
-	
+
 	logger.Info("Filtered seeds", "count", len(filteredSeeds))
 
 	// フィルタリングされたシードからログを生成
 	baseDate := time.Date(startTime.Year(), startTime.Month(), startTime.Day(), 0, 0, 0, 0, startTime.Location())
-	
+
 	for i, seed := range filteredSeeds {
 		// シードのタイムスタンプ（0時からの秒数）を実際の時刻に変換
 		logTime := baseDate.Add(time.Duration(seed.Timestamp) * time.Second)
-		
+
 		// 未来のログは除外
 		if logTime.After(now) {
 			break
 		}
-		
+
 		// 範囲外のログはスキップ（念のため）
 		if logTime.Before(startTime) || logTime.After(endTime) {
 			continue
 		}
-		
+
 		logEntry := generator.GenerateLogEntry(seed, baseDate, i)
 		logEntry.ID.Time = logTime.Format(time.RFC3339)
 		allLogs = append(allLogs, *logEntry)
@@ -319,9 +317,6 @@ func generateLogs(ctx context.Context, startTime, endTime time.Time, limit, offs
 	logger.Info("Returning paginated logs", "start", start, "end", end, "pageSize", end-start)
 	return allLogs[start:end], total, nil
 }
-
-
-
 
 // getSeedData はキャッシュまたはS3からseedデータを取得する
 func getSeedData(ctx context.Context) ([]byte, error) {

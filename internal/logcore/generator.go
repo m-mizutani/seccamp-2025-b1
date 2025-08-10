@@ -100,8 +100,21 @@ func (g *Generator) determineApplicationName(eventType uint8) string {
 
 // IPアドレスを生成
 func (g *Generator) generateIPAddress(user User, rng *rand.Rand) string {
-	// 通常は内部IPアドレス
-	return fmt.Sprintf("192.168.1.%d", rng.Intn(254)+1)
+	// ユーザーごとに一貫したIPアドレスを生成（ユーザーのメールアドレスをハッシュ化）
+	hash := 0
+	for _, c := range user.Email {
+		hash = hash*31 + int(c)
+	}
+	
+	// 基本的に1つのIPアドレス、たまに2つ目のIPアドレス（自宅と会社など）
+	ipIndex := 0
+	if rng.Float32() < 0.05 { // 5%の確率で2つ目のIP
+		ipIndex = 1
+	}
+	
+	// ユーザーごとに固定のIPアドレスを生成
+	baseIP := (hash + ipIndex) % 254 + 1
+	return fmt.Sprintf("192.168.1.%d", baseIP)
 }
 
 // Drive アクセスイベントを生成

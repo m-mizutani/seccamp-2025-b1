@@ -342,6 +342,23 @@ GitHub Actions のログで以下を確認：
 
 ここからは、実際にセキュリティイベントを検知するSQLクエリを作成していきます。以下の課題から選んで実装してみましょう。
 
+**注意事項**:
+- 以下のSQL例では時刻フィルタリングに`to_unixtime(current_timestamp)`を使用しています（AWS Athenaで利用可能）
+- WITH句を使用して段階的にデータを処理しています
+
+**WITH句について（初心者向け説明）**:
+WITH句は複雑なクエリを分かりやすく書くための機能です。一時的な結果セットに名前を付けて、後で参照できます。
+```sql
+WITH 名前1 AS (
+    -- 最初の処理
+),
+名前2 AS (
+    -- 名前1の結果を使った処理
+)
+-- 最終的な結果を取得
+SELECT * FROM 名前2;
+```
+
 #### 🎯 課題1: 継続的な認証攻撃の検知
 
 **シナリオ解説（初心者向け）**:
@@ -383,7 +400,7 @@ GitHub Actions のログで以下を確認：
 
 ```sql
 -- 過去5分間のログを対象にする
-WHERE time >= (unix_timestamp() - 300) * 1000
+WHERE time >= (to_unixtime(current_timestamp) - 300) * 1000
 ```
 
 </details>
@@ -401,20 +418,34 @@ WHERE time >= (unix_timestamp() - 300) * 1000
 <summary>✅ 回答例</summary>
 
 ```sql
-SELECT 
-    src_endpoint.ip as attacker_ip,
-    COUNT(*) as failure_count,
-    COUNT(DISTINCT actor.user.email_addr) as target_users,
-    MIN(from_unixtime(time/1000)) as first_attempt,
-    MAX(from_unixtime(time/1000)) as last_attempt,
-    ARRAY_AGG(DISTINCT actor.user.email_addr) as targeted_users_list
-FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
-WHERE eventday = date_format(current_date, '%Y%m%d')
-    AND api.service.name = 'Google Identity'
-    AND status_id = 2
-    AND time >= (unix_timestamp() - 300) * 1000
-GROUP BY src_endpoint.ip
-HAVING COUNT(*) >= 10
+WITH login_failures AS (
+    -- まず、ログイン失敗のレコードを抽出
+    SELECT 
+        src_endpoint.ip,
+        actor.user.email_addr,
+        from_unixtime(time/1000) as attempt_time
+    FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+    WHERE eventday = date_format(current_date, '%Y%m%d')
+        AND api.service.name = 'Google Identity'
+        AND (status_id = 2 OR api.operation = 'login_failure')  -- 失敗の判定
+        AND time >= (to_unixtime(current_timestamp) - 300) * 1000  -- 過去5分間
+),
+attack_summary AS (
+    -- 次に、IPアドレスごとに集計
+    SELECT 
+        ip as attacker_ip,
+        COUNT(*) as failure_count,
+        COUNT(DISTINCT email_addr) as target_users,
+        MIN(attempt_time) as first_attempt,
+        MAX(attempt_time) as last_attempt,
+        ARRAY_AGG(DISTINCT email_addr) as targeted_users_list
+    FROM login_failures
+    GROUP BY ip
+)
+-- 最後に、10回以上の失敗があったIPを抽出
+SELECT * 
+FROM attack_summary
+WHERE failure_count >= 10
 ORDER BY failure_count DESC;
 ```
 
@@ -472,7 +503,7 @@ ORDER BY failure_count DESC;
 
 ```sql
 -- 過去10分間
-WHERE time >= (unix_timestamp() - 600) * 1000
+WHERE time >= (to_unixtime(current_timestamp) - 600) * 1000
 -- ユーザーとIPでグループ化
 GROUP BY actor.user.email_addr, src_endpoint.ip
 ```
@@ -483,20 +514,35 @@ GROUP BY actor.user.email_addr, src_endpoint.ip
 <summary>✅ 回答例</summary>
 
 ```sql
-SELECT 
-    actor.user.email_addr as user_email,
-    src_endpoint.ip as source_ip,
-    COUNT(*) as download_count,
-    COUNT(DISTINCT web_resources[1].name) as unique_files,
-    MIN(from_unixtime(time/1000)) as first_download,
-    MAX(from_unixtime(time/1000)) as last_download,
-    ARRAY_AGG(DISTINCT substr(web_resources[1].name, 1, 50)) as sample_files
-FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
-WHERE eventday = date_format(current_date, '%Y%m%d')
-    AND activity_id = 7
-    AND time >= (unix_timestamp() - 600) * 1000
-GROUP BY actor.user.email_addr, src_endpoint.ip
-HAVING COUNT(*) >= 50
+WITH download_activities AS (
+    -- まず、ダウンロード活動を抽出
+    SELECT 
+        actor.user.email_addr,
+        src_endpoint.ip,
+        web_resources[1].name as file_name,
+        from_unixtime(time/1000) as download_time
+    FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+    WHERE eventday = date_format(current_date, '%Y%m%d')
+        AND activity_id = 7  -- ダウンロード操作
+        AND time >= (to_unixtime(current_timestamp) - 600) * 1000  -- 過去10分間
+),
+suspicious_downloads AS (
+    -- ユーザーとIPアドレスごとに集計
+    SELECT 
+        email_addr as user_email,
+        ip as source_ip,
+        COUNT(*) as download_count,
+        COUNT(DISTINCT file_name) as unique_files,
+        MIN(download_time) as first_download,
+        MAX(download_time) as last_download,
+        ARRAY_AGG(DISTINCT substr(file_name, 1, 50)) as sample_files
+    FROM download_activities
+    GROUP BY email_addr, ip
+)
+-- 50件以上のダウンロードを検知
+SELECT *
+FROM suspicious_downloads
+WHERE download_count >= 50
 ORDER BY download_count DESC;
 ```
 
@@ -563,21 +609,46 @@ SUM(CASE WHEN status_id = 2 THEN 1 ELSE 0 END) as failed_attempts
 <summary>✅ 回答例</summary>
 
 ```sql
-SELECT 
-    actor.user.email_addr as user_email,
-    COUNT(DISTINCT api.service.name) as services_accessed,
-    COUNT(*) as total_attempts,
-    SUM(CASE WHEN status_id = 2 THEN 1 ELSE 0 END) as failed_attempts,
-    CAST(SUM(CASE WHEN status_id = 2 THEN 1 ELSE 0 END) AS DOUBLE) / COUNT(*) as failure_rate,
-    ARRAY_AGG(DISTINCT api.service.name) as service_list,
-    MIN(from_unixtime(time/1000)) as first_attempt,
-    MAX(from_unixtime(time/1000)) as last_attempt
-FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
-WHERE eventday = date_format(current_date, '%Y%m%d')
-    AND time >= (unix_timestamp() - 300) * 1000
-GROUP BY actor.user.email_addr
-HAVING COUNT(DISTINCT api.service.name) >= 3
-    AND CAST(SUM(CASE WHEN status_id = 2 THEN 1 ELSE 0 END) AS DOUBLE) / COUNT(*) >= 0.7
+WITH service_access AS (
+    -- 過去5分間のすべてのサービスアクセスを抽出
+    SELECT 
+        actor.user.email_addr,
+        api.service.name as service_name,
+        api.operation,
+        status_id,
+        from_unixtime(time/1000) as access_time
+    FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+    WHERE eventday = date_format(current_date, '%Y%m%d')
+        AND time >= (to_unixtime(current_timestamp) - 600) * 1000  -- 過去5分間
+),
+user_service_summary AS (
+    -- ユーザーごとにサービスアクセスを集計
+    SELECT 
+        email_addr as user_email,
+        COUNT(DISTINCT service_name) as services_accessed,
+        COUNT(*) as total_attempts,
+        SUM(CASE 
+            WHEN status_id = 2 OR operation IN ('access_denied', 'permission_denied') 
+            THEN 1 ELSE 0 
+        END) as failed_attempts,
+        ARRAY_AGG(DISTINCT service_name) as service_list,
+        MIN(access_time) as first_attempt,
+        MAX(access_time) as last_attempt
+    FROM service_access
+    GROUP BY email_addr
+),
+suspicious_users AS (
+    -- 失敗率を計算
+    SELECT 
+        *,
+        CAST(failed_attempts AS DOUBLE) / total_attempts as failure_rate
+    FROM user_service_summary
+)
+-- 3つ以上のサービスにアクセスし、70%以上が失敗しているユーザーを検知
+SELECT *
+FROM suspicious_users
+WHERE services_accessed >= 3 
+    AND failure_rate >= 0.7
 ORDER BY services_accessed DESC, failure_rate DESC;
 ```
 
@@ -649,29 +720,38 @@ HAVING COUNT(DISTINCT src_endpoint.location.country) >= 2
 <summary>✅ 回答例</summary>
 
 ```sql
-SELECT 
-    actor.user.email_addr as user_email,
-    COUNT(DISTINCT src_endpoint.location.country) as country_count,
-    COUNT(DISTINCT src_endpoint.ip) as unique_ips,
-    COUNT(*) as total_access,
-    ARRAY_AGG(DISTINCT src_endpoint.location.country) as countries,
-    ARRAY_AGG(DISTINCT src_endpoint.ip) as ip_addresses,
-    MIN(from_unixtime(time/1000)) as first_access,
-    MAX(from_unixtime(time/1000)) as last_access,
-    time_diff('minute', 
-        MIN(from_unixtime(time/1000)), 
-        MAX(from_unixtime(time/1000))
-    ) as time_span_minutes
-FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
-WHERE eventday = date_format(current_date, '%Y%m%d')
-    AND time >= (unix_timestamp() - 1800) * 1000
-    AND src_endpoint.location.country IS NOT NULL
-GROUP BY actor.user.email_addr
-HAVING COUNT(DISTINCT src_endpoint.location.country) >= 2
-    AND time_diff('minute', 
-        MIN(from_unixtime(time/1000)), 
-        MAX(from_unixtime(time/1000))
-    ) <= 30
+WITH user_access_locations AS (
+    -- 過去30分間のユーザーアクセスと位置情報を抽出
+    SELECT 
+        actor.user.email_addr,
+        src_endpoint.ip,
+        src_endpoint.location.country,
+        from_unixtime(time/1000) as access_time
+    FROM amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
+    WHERE eventday = date_format(current_date, '%Y%m%d')
+        AND time >= (to_unixtime(current_timestamp) - 1800) * 1000  -- 過去30分間
+        AND src_endpoint.location.country IS NOT NULL
+),
+user_location_summary AS (
+    -- ユーザーごとに国とアクセス時間を集計
+    SELECT 
+        email_addr as user_email,
+        COUNT(DISTINCT country) as country_count,
+        COUNT(DISTINCT ip) as unique_ips,
+        COUNT(*) as total_access,
+        ARRAY_AGG(DISTINCT country) as countries,
+        ARRAY_AGG(DISTINCT ip) as ip_addresses,
+        MIN(access_time) as first_access,
+        MAX(access_time) as last_access,
+        date_diff('minute', MIN(access_time), MAX(access_time)) as time_span_minutes
+    FROM user_access_locations
+    GROUP BY email_addr
+)
+-- 30分以内に2カ国以上からアクセスがあったユーザーを検知
+SELECT *
+FROM user_location_summary
+WHERE country_count >= 2 
+    AND time_span_minutes <= 30
 ORDER BY country_count DESC, total_access DESC;
 ```
 

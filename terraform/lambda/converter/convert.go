@@ -456,6 +456,11 @@ func mapLocationFromIP(ip string) struct {
 
 	// Map based on IP patterns used in test data
 	switch {
+	case strings.HasPrefix(ip, "192.168."):
+		// Internal/Office IPs - Japan
+		location.City = "Tokyo"
+		location.Region = "Tokyo"
+		location.Country = "JP"
 	case strings.HasPrefix(ip, "192.0.2."):
 		// Japan IPs
 		location.City = "Tokyo"

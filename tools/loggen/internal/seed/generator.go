@@ -72,14 +72,14 @@ func (g *Generator) initializeContinuousPatterns() {
 
 	// Pattern 5: 超高速データ窃取
 	g.dataTheftState = &dataTheftState{
-		theftUser: "compromised@example.com",
-		theftIP:   "198.51.100.99",
+		theftUser: "tanaka.hiroshi@muhaijuku.com",  // 乗っ取られた正規ユーザーアカウント
+		theftIP:   "198.51.100.99",  // 海外からの不審なアクセス
 		fileIndex: 0,
 	}
 
 	// Pattern 6: マルチサービス不正アクセス試行
 	g.serviceProbingState = &serviceProbingState{
-		probingUser: "infected@example.com",
+		probingUser: "sato.yuki@muhaijuku.com",  // マルウェアに感染したユーザーアカウント
 		serviceOrder: []string{
 			"Google Drive",
 			"Google Calendar",
@@ -91,7 +91,7 @@ func (g *Generator) initializeContinuousPatterns() {
 
 	// Pattern 7: 地理的同時アクセス
 	g.geoAccessState = &geoAccessState{
-		user:        "travel@example.com",
+		user:        "yamada.takeshi@muhaijuku.com",  // 出張中のユーザー（の認証情報が盗まれた）
 		country1:    "JP",
 		country1IP:  "192.0.2.10",
 		country2:    "US",
@@ -485,7 +485,8 @@ func (g *Generator) generatePattern5DataTheft(t time.Time, sequence int) (uint8,
 	eventType := logcore.EventTypeDriveAccess
 	
 	// 特定の侵害されたユーザー
-	userIndex := uint8(10) // compromised@example.com用のインデックス
+	// tanaka.hiroshi@muhaijuku.com is at index 2
+	userIndex := uint8(2) // tanaka.kenji@muhai-academy.comを使いたいが、存在しないので代替
 	
 	// 異なるファイルを選択（インクリメント）
 	g.dataTheftState.fileIndex++
@@ -508,7 +509,7 @@ func (g *Generator) generatePattern6ServiceProbing(t time.Time, sequence int) (u
 	g.serviceProbingState.currentIndex = (g.serviceProbingState.currentIndex + 1) % len(serviceTypes)
 	
 	// 特定の感染ユーザー
-	userIndex := uint8(11) // infected@example.com用のインデックス
+	userIndex := uint8(3) // sato.yuki@muhaijuku.com (index 3)
 	
 	// リソースはサービスに応じて選択
 	resourceIndex := uint8(rand.Intn(10))
@@ -527,7 +528,7 @@ func (g *Generator) generatePattern7GeoAccess(t time.Time, sequence int) (uint8,
 	eventType := eventTypes[rand.Intn(len(eventTypes))]
 	
 	// 特定のユーザー
-	userIndex := uint8(12) // travel@example.com用のインデックス
+	userIndex := uint8(0) // yamada.takeshi@muhaijuku.com (index 0)
 	
 	// 国を交互に切り替え
 	g.geoAccessState.lastCountry = (g.geoAccessState.lastCountry + 1) % 2

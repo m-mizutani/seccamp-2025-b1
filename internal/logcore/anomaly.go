@@ -281,7 +281,7 @@ func generateExample4HighFreqAuthAttack(base *GoogleWorkspaceLogEntry, rng *rand
 // Pattern 5: 超高速データ窃取
 func generateExample5RapidDataTheft(base *GoogleWorkspaceLogEntry, rng *rand.Rand) *GoogleWorkspaceLogEntry {
 	// 特定の侵害されたユーザーとIP
-	base.Actor.Email = "compromised@example.com"
+	base.Actor.Email = "tanaka.hiroshi@muhaijuku.com"
 	base.IPAddress = "198.51.100.99"
 	
 	// ドライブアクセスイベント
@@ -318,15 +318,15 @@ func generateExample5RapidDataTheft(base *GoogleWorkspaceLogEntry, rng *rand.Ran
 // Pattern 6: マルチサービス不正アクセス試行
 func generateExample6MultiServiceProbing(base *GoogleWorkspaceLogEntry, rng *rand.Rand) *GoogleWorkspaceLogEntry {
 	// 特定の感染ユーザー
-	base.Actor.Email = "infected@example.com"
+	base.Actor.Email = "sato.yuki@muhaijuku.com"
 	
 	// サービスをランダムに選択
 	services := []string{"drive", "calendar", "gmail", "admin"}
 	selectedService := services[rng.Intn(len(services))]
 	base.ID.ApplicationName = selectedService
 	
-	// 70%は権限エラー
-	if rng.Float32() < 0.7 {
+	// 80%は権限エラー（検知閾値70%を確実に超えるため）
+	if rng.Float32() < 0.8 {
 		switch selectedService {
 		case "drive":
 			base.Events = []Event{
@@ -364,7 +364,7 @@ func generateExample6MultiServiceProbing(base *GoogleWorkspaceLogEntry, rng *ran
 			}
 		}
 	} else {
-		// 30%は成功（プロービングの一環として一部成功）
+		// 20%は成功（プロービングの一環として一部成功）
 		switch selectedService {
 		case "drive":
 			base.Events = []Event{
@@ -417,7 +417,7 @@ func generateExample6MultiServiceProbing(base *GoogleWorkspaceLogEntry, rng *ran
 // Pattern 7: 地理的同時アクセス
 func generateExample7SimultaneousGeoAccess(base *GoogleWorkspaceLogEntry, rng *rand.Rand) *GoogleWorkspaceLogEntry {
 	// 特定のユーザー
-	base.Actor.Email = "travel@example.com"
+	base.Actor.Email = "yamada.takeshi@muhaijuku.com"
 	
 	// 50%の確率で国を切り替え
 	if rng.Float32() < 0.5 {
