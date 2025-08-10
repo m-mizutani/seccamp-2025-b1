@@ -244,8 +244,8 @@ func generateRandomString(rng *rand.Rand, length int) string {
 
 // Pattern 4: 高頻度認証攻撃
 func generateExample4HighFreqAuthAttack(base *GoogleWorkspaceLogEntry, rng *rand.Rand) *GoogleWorkspaceLogEntry {
-	// 固定の攻撃者IP
-	base.IPAddress = "203.0.113.99"
+	// 固定の攻撃者IP（日本国内の不審なIPアドレス）
+	base.IPAddress = "133.200.32.94"
 	
 	// ログインイベントに変更
 	base.ID.ApplicationName = "login"

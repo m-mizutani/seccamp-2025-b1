@@ -74,7 +74,7 @@ func NewAuditlogClient(baseURL string, timeout time.Duration) *AuditlogClient {
 }
 
 func (c *AuditlogClient) FetchLogs(ctx context.Context, startTime, endTime time.Time, offset, limit int) (*LogResponse, error) {
-	u, err := url.Parse(c.baseURL + "/logs")
+	u, err := url.Parse(c.baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
@@ -112,7 +112,7 @@ func (c *AuditlogClient) FetchLogs(ctx context.Context, startTime, endTime time.
 func (c *AuditlogClient) FetchAllLogs(ctx context.Context, startTime, endTime time.Time) ([]LogEntry, error) {
 	var allLogs []LogEntry
 	offset := 0
-	limit := 10000
+	limit := 5000
 
 	for {
 		resp, err := c.FetchLogs(ctx, startTime, endTime, offset, limit)

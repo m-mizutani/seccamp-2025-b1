@@ -172,10 +172,10 @@ func TestPatternConsistency(t *testing.T) {
 	}
 	
 	// Verify fixed IPs and users
-	if generator.authAttackState.attackerIP != "203.0.113.99" {
+	if generator.authAttackState.attackerIP != "133.200.32.94" {
 		t.Errorf("Unexpected attacker IP: %s", generator.authAttackState.attackerIP)
 	}
-	if generator.dataTheftState.theftUser != "compromised@example.com" {
+	if generator.dataTheftState.theftUser != "tanaka.hiroshi@muhaijuku.com" {
 		t.Errorf("Unexpected theft user: %s", generator.dataTheftState.theftUser)
 	}
 	if generator.geoAccessState.country1 != "JP" || generator.geoAccessState.country2 != "US" {

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -489,28 +488,16 @@ func mapLocationFromIP(ip string) struct {
 		location.City = "San Francisco"
 		location.Region = "California"
 		location.Country = "US"
+	case strings.HasPrefix(ip, "133.200.32."):
+		// Suspicious IPs from Japan (for attack patterns)
+		location.City = "Tokyo"
+		location.Region = "Tokyo"
+		location.Country = "JP"
 	case strings.HasPrefix(ip, "203.0.113."):
-		// External partner IPs - mapped based on specific IPs
-		if ip == "203.0.113.99" {
-			// This IP is used for attack patterns
-			location.City = "Moscow"
-			location.Region = "Moscow"
-			location.Country = "RU"
-		} else {
-			// Normal external partners are from Japan or US
-			lastOctet, _ := strconv.Atoi(strings.Split(ip, ".")[3])
-			if lastOctet < 128 {
-				// Japanese partners
-				location.City = "Tokyo"
-				location.Region = "Tokyo"
-				location.Country = "JP"
-			} else {
-				// US partners
-				location.City = "San Francisco"
-				location.Region = "California"
-				location.Country = "US"
-			}
-		}
+		// External partner IPs - all from Japan now
+		location.City = "Tokyo"
+		location.Region = "Tokyo"
+		location.Country = "JP"
 	case strings.HasPrefix(ip, "192.168."):
 		// Internal IPs
 		location.City = "Tokyo"

@@ -103,15 +103,21 @@ func (g *Generator) generateIPAddress(user User, timestamp time.Time) string {
 	// 外部ユーザーは別のIPレンジを使用
 	if user.Role == "external" {
 		// 外部ユーザーは203.0.113.x（ドキュメント用のIPレンジ）
+		// ただし .99 は攻撃者用に予約されているので避ける
 		hash := 0
 		for _, c := range user.Email {
 			hash = hash*31 + int(c)
 		}
-		baseIP := (hash % 80) + 1
+		baseIP := (hash % 70) + 1  // 1-70の範囲
 		
 		// 外部ユーザーも2-3のIPを使い分け
 		ipVariation := g.selectIPVariation(timestamp, hash)
-		finalIP := baseIP + (ipVariation * 25)
+		finalIP := baseIP + (ipVariation * 20)
+		
+		// 99を避ける（70 + 2*20 = 110が最大値なので98を上限に）
+		if finalIP > 98 {
+			finalIP = 98
+		}
 		return fmt.Sprintf("203.0.113.%d", finalIP)
 	}
 	
@@ -136,36 +142,42 @@ func (g *Generator) generateUserSpecificIP(userHash int, variation int) string {
 	// 最後のオクテットはユーザーハッシュから決定
 	lastOctet := (userHash % 200) + 20  // 20-219の範囲
 	
+	// オフィスIPは常に同じ（固定）
+	officeIP := fmt.Sprintf("210.160.34.%d", lastOctet)
+	
 	// variation に基づいて異なるIPレンジを使用
 	switch variation {
 	case 0:
 		// オフィス（固定IP）
-		return fmt.Sprintf("210.160.34.%d", lastOctet)
+		return officeIP
 	case 1:
 		// モバイル/カフェ（様々なISP）
+		// ランダム性を高めるため、時間要素も含める
 		ispChoice := userHash % 4
+		randomOffset := (userHash * variation) % 50
 		switch ispChoice {
 		case 0:
-			return fmt.Sprintf("126.204.%d.%d", (userHash%50)+100, lastOctet)  // docomo
+			return fmt.Sprintf("126.204.%d.%d", (randomOffset%50)+100, (lastOctet+randomOffset)%256)  // docomo
 		case 1:
-			return fmt.Sprintf("110.163.%d.%d", (userHash%50)+150, lastOctet)  // au
+			return fmt.Sprintf("110.163.%d.%d", (randomOffset%50)+150, (lastOctet+randomOffset)%256)  // au
 		case 2:
-			return fmt.Sprintf("101.142.%d.%d", (userHash%50)+100, lastOctet)  // softbank
+			return fmt.Sprintf("101.142.%d.%d", (randomOffset%50)+100, (lastOctet+randomOffset)%256)  // softbank
 		default:
-			return fmt.Sprintf("114.156.%d.%d", (userHash%50)+50, lastOctet)   // その他
+			return fmt.Sprintf("114.156.%d.%d", (randomOffset%50)+50, (lastOctet+randomOffset)%256)   // その他
 		}
 	default:
 		// 自宅（様々な一般ISP）
 		ispChoice := (userHash + 1) % 4  // モバイルとは異なるISPを選択
+		randomOffset := (userHash * (variation + 2)) % 50
 		switch ispChoice {
 		case 0:
-			return fmt.Sprintf("118.103.%d.%d", (userHash%50)+100, lastOctet)  // OCN
+			return fmt.Sprintf("118.103.%d.%d", (randomOffset%50)+100, (lastOctet+randomOffset)%256)  // OCN
 		case 1:
-			return fmt.Sprintf("122.208.%d.%d", (userHash%50)+50, lastOctet)   // BIGLOBE
+			return fmt.Sprintf("122.208.%d.%d", (randomOffset%50)+50, (lastOctet+randomOffset)%256)   // BIGLOBE
 		case 2:
-			return fmt.Sprintf("125.198.%d.%d", (userHash%50)+100, lastOctet)  // So-net
+			return fmt.Sprintf("125.198.%d.%d", (randomOffset%50)+100, (lastOctet+randomOffset)%256)  // So-net
 		default:
-			return fmt.Sprintf("133.200.%d.%d", (userHash%50)+50, lastOctet)   // その他
+			return fmt.Sprintf("133.200.%d.%d", (randomOffset%50)+50, (lastOctet+randomOffset)%256)   // その他
 		}
 	}
 }

@@ -60,7 +60,7 @@ func NewGenerator() *Generator {
 func (g *Generator) initializeContinuousPatterns() {
 	// Pattern 4: 高頻度認証攻撃
 	g.authAttackState = &authAttackState{
-		attackerIP: "203.0.113.99",
+		attackerIP: "133.200.32.94",
 		targetUsers: []string{
 			"admin@example.com",
 			"user1@example.com",
