@@ -156,7 +156,8 @@ func generateTimeAnomaly(base *GoogleWorkspaceLogEntry, rng *rand.Rand) *GoogleW
 	// 深夜帯のアクセス
 	if hour >= 0 && hour <= 6 {
 		base.Events[0].Name = "suspicious_access"
-		base.IPAddress = generateSuspiciousIP(rng)
+		// IPアドレスは変更しない（同じ国からのアクセスを維持）
+		// 時間帯の異常のみを表現
 	}
 
 	return base
@@ -179,20 +180,22 @@ func generateVolumeAnomaly(base *GoogleWorkspaceLogEntry, rng *rand.Rand) *Googl
 
 // 疑わしいIPアドレスを生成
 func generateSuspiciousIP(rng *rand.Rand) string {
+	// 日本国内の疑わしいIPのみを使用（国をまたがないように）
 	suspiciousIPs := []string{
-		"198.51.100.10", // US IP
-		"203.0.113.45",  // External partner
-		"192.0.2.100",   // Test IP
+		"192.0.2.100",   // Test IP (JP)
+		"192.0.2.101",   // Test IP (JP)
+		"192.0.2.102",   // Test IP (JP)
 	}
 	return suspiciousIPs[rng.Intn(len(suspiciousIPs))]
 }
 
 // 外部IPアドレスを生成
 func generateExternalIP(rng *rand.Rand) string {
+	// 外部アクセスも日本からのみ（国をまたがないように）
 	externalIPs := []string{
-		"203.0.113.45",  // 外部からのアクセス
-		"198.51.100.10", // パートナー企業
-		"192.0.2.100",   // テストIP
+		"203.0.113.10",  // 外部パートナー (JP based on mapping)
+		"203.0.113.11",  // 外部パートナー (JP based on mapping)
+		"203.0.113.12",  // 外部パートナー (JP based on mapping)
 	}
 	return externalIPs[rng.Intn(len(externalIPs))]
 }

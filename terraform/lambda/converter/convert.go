@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -456,13 +457,30 @@ func mapLocationFromIP(ip string) struct {
 
 	// Map based on IP patterns used in test data
 	switch {
+	case strings.HasPrefix(ip, "210.160."):
+		// Office IPs - Tokyo
+		location.City = "Tokyo"
+		location.Region = "Tokyo"
+		location.Country = "JP"
+	case strings.HasPrefix(ip, "126.204.") || strings.HasPrefix(ip, "110.163.") || 
+	     strings.HasPrefix(ip, "101.142.") || strings.HasPrefix(ip, "114.156."):
+		// Mobile carrier IPs - Various cities in Japan
+		location.City = "Tokyo"
+		location.Region = "Tokyo"
+		location.Country = "JP"
+	case strings.HasPrefix(ip, "118.103.") || strings.HasPrefix(ip, "122.208.") || 
+	     strings.HasPrefix(ip, "125.198.") || strings.HasPrefix(ip, "133.200."):
+		// Home ISP IPs - Japan
+		location.City = "Tokyo"
+		location.Region = "Tokyo"
+		location.Country = "JP"
 	case strings.HasPrefix(ip, "192.168."):
-		// Internal/Office IPs - Japan
+		// Legacy internal IPs - Japan
 		location.City = "Tokyo"
 		location.Region = "Tokyo"
 		location.Country = "JP"
 	case strings.HasPrefix(ip, "192.0.2."):
-		// Japan IPs
+		// Test IPs - Japan
 		location.City = "Tokyo"
 		location.Region = "Tokyo"
 		location.Country = "JP"
@@ -472,19 +490,26 @@ func mapLocationFromIP(ip string) struct {
 		location.Region = "California"
 		location.Country = "US"
 	case strings.HasPrefix(ip, "203.0.113."):
-		// Attacker IPs - various countries
+		// External partner IPs - mapped based on specific IPs
 		if ip == "203.0.113.99" {
+			// This IP is used for attack patterns
 			location.City = "Moscow"
 			location.Region = "Moscow"
 			location.Country = "RU"
-		} else if ip == "203.0.113.45" {
-			location.City = "Beijing"
-			location.Region = "Beijing"
-			location.Country = "CN"
 		} else {
-			location.City = "Unknown"
-			location.Region = "Unknown"
-			location.Country = "XX"
+			// Normal external partners are from Japan or US
+			lastOctet, _ := strconv.Atoi(strings.Split(ip, ".")[3])
+			if lastOctet < 128 {
+				// Japanese partners
+				location.City = "Tokyo"
+				location.Region = "Tokyo"
+				location.Country = "JP"
+			} else {
+				// US partners
+				location.City = "San Francisco"
+				location.Region = "California"
+				location.Country = "US"
+			}
 		}
 	case strings.HasPrefix(ip, "192.168."):
 		// Internal IPs

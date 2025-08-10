@@ -47,7 +47,7 @@ func (g *Generator) GenerateLogEntry(seed LogSeed, baseDate time.Time, sequenceI
 			ProfileID:  user.ProfileID,
 		},
 		OwnerDomain: g.config.OwnerDomain,
-		IPAddress:   g.generateIPAddress(user, rng),
+		IPAddress:   g.generateIPAddress(user, timestamp),
 		Events:      []Event{},
 	}
 
@@ -99,22 +99,109 @@ func (g *Generator) determineApplicationName(eventType uint8) string {
 }
 
 // IPアドレスを生成
-func (g *Generator) generateIPAddress(user User, rng *rand.Rand) string {
+func (g *Generator) generateIPAddress(user User, timestamp time.Time) string {
+	// 外部ユーザーは別のIPレンジを使用
+	if user.Role == "external" {
+		// 外部ユーザーは203.0.113.x（ドキュメント用のIPレンジ）
+		hash := 0
+		for _, c := range user.Email {
+			hash = hash*31 + int(c)
+		}
+		baseIP := (hash % 80) + 1
+		
+		// 外部ユーザーも2-3のIPを使い分け
+		ipVariation := g.selectIPVariation(timestamp, hash)
+		finalIP := baseIP + (ipVariation * 25)
+		return fmt.Sprintf("203.0.113.%d", finalIP)
+	}
+	
+	// 内部ユーザーのIPアドレス生成
 	// ユーザーごとに一貫したIPアドレスを生成（ユーザーのメールアドレスをハッシュ化）
 	hash := 0
 	for _, c := range user.Email {
 		hash = hash*31 + int(c)
 	}
 	
-	// 基本的に1つのIPアドレス、たまに2つ目のIPアドレス（自宅と会社など）
-	ipIndex := 0
-	if rng.Float32() < 0.05 { // 5%の確率で2つ目のIP
-		ipIndex = 1
+	// 時間帯と曜日に基づいて2-3のIPアドレスを使い分け
+	ipVariation := g.selectIPVariation(timestamp, hash)
+	
+	// 各ユーザーに固有の2-3個のIPアドレスを割り当て
+	// ユーザーのハッシュ値に基づいて異なるIPレンジから選択
+	return g.generateUserSpecificIP(hash, ipVariation)
+}
+
+// ユーザー固有のIPアドレスを生成
+func (g *Generator) generateUserSpecificIP(userHash int, variation int) string {
+	// ユーザーごとに異なるが固定のIPを生成
+	// 最後のオクテットはユーザーハッシュから決定
+	lastOctet := (userHash % 200) + 20  // 20-219の範囲
+	
+	// variation に基づいて異なるIPレンジを使用
+	switch variation {
+	case 0:
+		// オフィス（固定IP）
+		return fmt.Sprintf("210.160.34.%d", lastOctet)
+	case 1:
+		// モバイル/カフェ（様々なISP）
+		ispChoice := userHash % 4
+		switch ispChoice {
+		case 0:
+			return fmt.Sprintf("126.204.%d.%d", (userHash%50)+100, lastOctet)  // docomo
+		case 1:
+			return fmt.Sprintf("110.163.%d.%d", (userHash%50)+150, lastOctet)  // au
+		case 2:
+			return fmt.Sprintf("101.142.%d.%d", (userHash%50)+100, lastOctet)  // softbank
+		default:
+			return fmt.Sprintf("114.156.%d.%d", (userHash%50)+50, lastOctet)   // その他
+		}
+	default:
+		// 自宅（様々な一般ISP）
+		ispChoice := (userHash + 1) % 4  // モバイルとは異なるISPを選択
+		switch ispChoice {
+		case 0:
+			return fmt.Sprintf("118.103.%d.%d", (userHash%50)+100, lastOctet)  // OCN
+		case 1:
+			return fmt.Sprintf("122.208.%d.%d", (userHash%50)+50, lastOctet)   // BIGLOBE
+		case 2:
+			return fmt.Sprintf("125.198.%d.%d", (userHash%50)+100, lastOctet)  // So-net
+		default:
+			return fmt.Sprintf("133.200.%d.%d", (userHash%50)+50, lastOctet)   // その他
+		}
+	}
+}
+
+// IPバリエーションを選択（0, 1, 2のいずれか）
+func (g *Generator) selectIPVariation(timestamp time.Time, userHash int) int {
+	hour := timestamp.Hour()
+	weekday := timestamp.Weekday()
+	
+	// 平日と週末で異なるパターン
+	if weekday == time.Saturday || weekday == time.Sunday {
+		// 週末は主に自宅IP（variation 2）
+		if hour >= 10 && hour <= 16 {
+			// 昼間は外出先（variation 1）
+			return 1
+		}
+		return 2
 	}
 	
-	// ユーザーごとに固定のIPアドレスを生成
-	baseIP := (hash + ipIndex) % 254 + 1
-	return fmt.Sprintf("192.168.1.%d", baseIP)
+	// 平日
+	if hour >= 9 && hour <= 12 {
+		// 午前中はオフィス（variation 0）
+		return 0
+	} else if hour >= 13 && hour <= 17 {
+		// 午後もオフィス（variation 0）
+		return 0
+	} else if hour >= 18 && hour <= 22 {
+		// 夜は自宅（variation 2）
+		return 2
+	} else {
+		// 深夜・早朝は自宅またはモバイル
+		if userHash % 3 == 0 {
+			return 1 // モバイル/カフェ
+		}
+		return 2 // 自宅
+	}
 }
 
 // Drive アクセスイベントを生成

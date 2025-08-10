@@ -176,6 +176,7 @@ resource "aws_lambda_event_source_mapping" "converter_sqs" {
 resource "null_resource" "build_auditlog" {
   triggers = {
     source_hash = data.archive_file.auditlog_source.output_base64sha256
+    internal_hash = data.archive_file.internal_source.output_base64sha256
   }
 
   provisioner "local-exec" {
@@ -195,6 +196,14 @@ data "archive_file" "auditlog_source" {
   source_dir  = "${path.module}/lambda/auditlog"
   output_path = "${path.module}/lambda/auditlog_source.zip"
   excludes    = ["*.zip", "go.sum", "bootstrap", "*_test.go", "testdata"]
+}
+
+# Archive internal package files for trigger detection
+data "archive_file" "internal_source" {
+  type        = "zip"
+  source_dir  = "${path.module}/../internal"
+  output_path = "${path.module}/lambda/internal_source.zip"
+  excludes    = ["*.zip", "*_test.go", "testdata"]
 }
 
 # Archive file for auditlog Lambda
