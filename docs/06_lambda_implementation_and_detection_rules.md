@@ -2,15 +2,15 @@
 
 **時間：11:05-12:05 (60分)**
 
-## 概要
+## 🎯 概要
 
 このパートでは、実際にコードを書いて Security Lake を活用したセキュリティ監視システムの一部を実装します。前のパートで学んだ OCSF スキーマの知識を活かして検知ルールを作成し、自動化された脅威検知システムを構築します。
 
-## ログ収集 Lambda 実装
+## 🔧 ログ収集 Lambda 実装
 
-ここからは個人に分かれてコードを書きます。各リソースは「チーム」という単位として分けています。（今回は1人ちーむとなります）アサインは https://github.com/seccamp2025-b/b1-secmon を参照してください。
+ここからは個人に分かれてコードを書きます。各リソースは「チーム」という単位として分けています。（今回は1人チームとなります） アサインはIAMユーザ名と同じものになります。
 
-### 環境準備・理解
+### 📋 環境準備・理解
 
 #### 1. GitHub リポジトリのクローンとブランチ作成
 
@@ -54,7 +54,7 @@ b1-secmon/
     └── create-team.sh # 新チーム作成スクリプト
 ```
 
-### 初期デプロイ
+### 🚀 初期デプロイ
 
 チームのLambda環境をセットアップします。初心者の方でも迷わないよう、一つ一つ丁寧に説明していきます。
 
@@ -168,22 +168,19 @@ GitHubのWebサイトでPull Requestを作成します。
 Lambda関数が正常に実行されると、アラートが送信されます。
 
 1. ブラウザで https://warren-171198963743.asia-northeast1.run.app/alerts を開く
-2. ページ上部の検索ボックスに自分のチーム名（例: `red`）を入力
-3. 自分のチームから送信されたアラートが表示されることを確認
+2. 自分のチームから送信されたアラートが表示されることを確認
 
 アラートには以下のような情報が含まれているはずです：
-- **Title**: 検知ルールのタイトル
-- **Team**: 自分のチーム名
-- **Time**: アラート送信時刻
+- **Title**: `Title` フィールドに
+- **Raw Data**: 送信したJSON形式のデータ全体
 
 もしアラートが表示されない場合は：
 - Lambda関数の実行ログを確認（CloudWatch Logs）
 - 数分待ってからページをリロード
-- 講師に相談
 
 これで初期デプロイは完了です。次は実際の検知ルールを実装していきましょう。
 
-### Lambda 実装の概要
+### 💡 Lambda 実装の概要
 
 以降は `{team_id}/{任意の名前}` でブランチを作って作業し、それをPull Requestにするようにしてください。
 
@@ -239,25 +236,7 @@ func detect(ctx context.Context) error {
 
 `queries/` ディレクトリに検知ルールとなる SQL を配置します：
 
-```sql
--- queries/suspicious_login.sql
-SELECT 
-    unmapped['email'] as user_email,
-    src_endpoint.ip as source_ip,
-    COUNT(*) as failed_count
-FROM 
-    amazon_security_lake_glue_db_ap_northeast_1.amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0
-WHERE 
-    eventday = date_format(current_date, '%Y%m%d')
-    AND activity_name = 'login'
-    AND status_code != '1'  -- 失敗
-GROUP BY 
-    unmapped['email'], src_endpoint.ip
-HAVING 
-    COUNT(*) >= 5  -- 5回以上の失敗
-```
-
-### ローカルでのテストとデバッグ
+### 🔍 ローカルでの確認
 
 #### 1. 構文チェック
 
@@ -281,50 +260,91 @@ AWS コンソールの Athena でクエリを直接実行して動作確認：
 2. データベース: `amazon_security_lake_glue_db_ap_northeast_1` を選択
 3. クエリエディタでSQLを実行
 
-### GitHub Actions によるデプロイ
+### 🔨 テストとデバッグのヒント
 
-#### 1. コミットとプッシュ
+#### 1. ローカルでの単体テスト
 
+ローカル環境でLambda関数をテストしたい場合は、AWS APIキーを発行できます。
+https://docs.aws.amazon.com/keyspaces/latest/devguide/create.keypair.html
+
+以下の権限が付与されたキーを発行されます。
+- Athenaクエリ実行権限
+- S3読み取り権限（Security Lake）
+- SNS発行権限（アラート送信）
+
+**ローカルテストの環境設定**：
 ```bash
-git add lambda/blue/
-git commit -m "feat: 不審なログイン試行の検知ルールを追加"
-git push origin feature/my-detector
+# 発行されたキーを環境変数に設定
+export AWS_ACCESS_KEY_ID="発行されたキー"
+export AWS_SECRET_ACCESS_KEY="発行されたシークレット"
+export AWS_REGION="ap-northeast-1"
+
+# ローカルでテスト実行
+cd lambda/{team_id}
+go test -v
 ```
 
-#### 2. プルリクエスト作成
+**単体テストの例**：
+```go
+// main_test.go
+package main
 
-GitHub でプルリクエストを作成し、main ブランチにマージすると自動デプロイが実行されます。
+import (
+	"context"
+	"testing"
+)
 
-#### 3. デプロイの確認
+func TestDetect(t *testing.T) {
+	ctx := context.Background()
 
-GitHub Actions のログで以下を確認：
-- ビルド成功
-- Lambda 関数の更新完了
-- 環境変数の設定
+	err := Detect(ctx)
+	if err == nil {
+		t.Log("Detect completed without error")
+	} else {
+		t.Fatalf("Detect returned error: %v", err)
+	}
+}
+```
 
-### 実装のベストプラクティス
+#### クラウド上でのデバッグのポイント
 
-1. **エラーハンドリング**
-   - 必ず `goerr.Wrap` でエラーをラップ
-   - エラー時は `logger.Error` でログ出力
+1. **CloudWatch Logsでログ確認**
+   - Lambda関数の実行ログを確認
+   - エラーメッセージやクエリ結果をチェック
 
-2. **アラートメッセージ**
-   - トリアージに必要な情報を含める
-   - 誤検知を減らすため、条件や閾値は慎重に設定
+2. **Athenaでクエリを直接実行**
+   - SQLが正しいか確認
+   - 期待する結果が返ってくるか確認
 
-3. **パフォーマンス**
-   - クエリは必要最小限のデータを取得
-   - `eventday` でパーティション絞り込み必須
+3. **アラートが表示されない場合**
+   - クエリ結果が0件でないか確認
+   - アラート送信ロジックを確認
 
-4. **セキュリティ**
-   - 秘密情報はコードに含めない
-   - 環境変数は GitHub Actions が自動設定
+## 📢 実装作業における方針
 
-## 検知ルールの作成
+### 🤖 生成AIツールの利用
+
+生成AIツールは使って良いものとします。ただし以下の条件に準じてください。
+
+- いきなり要件だけ入れてコードやSQLを出力するのはNG
+- まず自分で検討して、要所で生成AIツールに質問するのはOK
+- 自分で生成されたコードやSQLについて何をしているのか、どのような挙動が期待できるのかをすべて説明できる状態なら、生成されたコード・SQLを利用してもOK
+- 「なぜこうしたのか」という質問に対して「生成AIが出力しました」というのはNG
+
+端的にいうと、 **利用するコードやSQLに対する最終的な説明責任は自分にある** という前提で利用してください。
+
+### ⏰ 検知ロジックの実行について
+
+本来は定期的にこのLambdaが呼ばれて検知を実行します。しかし今回は実運用に入る前のテストの段階という位置づけとします。そのため定期実行機能は設定されていないので、皆さんのよいタイミングで「テスト」ボタンを押して実行してください。
+
+- ただし検知のロジックとしては定期実行することを前提にします。そのため **適切な時間範囲でクエリするようにしてください**
+- Lambdaが呼ばれる間隔はそれぞれにお任せします。実際にSQLを実行してみてデータ量などを鑑みて決めてください（およそ5分〜1時間の間とみて良いでしょう）
+
+## 🛡️ 検知ルールの作成
 
 検知ルールを作成し、定期実行される（想定の）Lambda関数に組み込み、検知システムを完成させます。SQLによって発見された事象をアラートとして発報する際、アラートを調査する担当者の行動をイメージして必要な情報を報告することが重要です。
 
-### 調査のためにアラートに含めるべき情報
+### 🔎 調査のためにアラートに含めるべき情報
 
 基本的には5W(1H)を抑える形式が望ましいです。そこからさらに調査の足がかりになるような情報を付与できるとよいでしょう。
 
@@ -338,7 +358,7 @@ GitHub Actions のログで以下を確認：
 
 このほか、IoC（Indicator of Compromise）になりそうな情報や、アラートの概況（特に複数アラートを束ねる場合）を伝える情報を組み込むのが良いでしょう。
 
-### 検知ルールの作成課題
+### 📝 検知ルールの作成課題
 
 ここからは、実際にセキュリティイベントを検知するSQLクエリを作成していきます。以下の課題から選んで実装してみましょう。
 
@@ -361,7 +381,7 @@ SELECT * FROM 名前2;
 
 #### 🎯 課題1: 継続的な認証攻撃の検知
 
-**シナリオ解説（初心者向け）**:
+**シナリオ解説**:
 認証攻撃とは、悪意のある攻撃者が正規ユーザーになりすまそうとする行為です。最も一般的な手法として「ブルートフォース攻撃」や「パスワードスプレー攻撃」があります。
 
 - **ブルートフォース攻撃**: 特定のユーザーに対して様々なパスワードを試す
@@ -453,7 +473,7 @@ ORDER BY failure_count DESC;
 
 #### 🎯 課題2: 大量データ窃取の検知
 
-**シナリオ解説（初心者向け）**:
+**シナリオ解説**:
 データ窃取（Data Exfiltration）とは、組織の機密情報を不正に外部へ持ち出す行為です。内部犯行と外部からの侵入の両方で発生する可能性があります。
 
 典型的なデータ窃取の手口：
@@ -550,7 +570,7 @@ ORDER BY download_count DESC;
 
 #### 🎯 課題3: 異常なサービスアクセスパターンの検知
 
-**シナリオ解説（初心者向け）**:
+**シナリオ解説**:
 攻撃者が組織のシステムに侵入した後、最初に行うのが「偵察活動」です。どのようなサービスやデータにアクセスできるかを探索し、価値の高い情報を見つけようとします。
 
 典型的な偵察活動のパターン：
@@ -656,7 +676,7 @@ ORDER BY services_accessed DESC, failure_rate DESC;
 
 #### 🎯 課題4: 地理的に不可能なアクセスの検知
 
-**シナリオ解説（初心者向け）**:
+**シナリオ解説**:
 「不可能な移動（Impossible Travel）」は、アカウント乗っ取りを検知する重要な指標です。物理的に移動不可能な速度で異なる場所からアクセスがあった場合、それは同一ユーザーによるものではなく、攻撃者による不正アクセスの可能性が高いです。
 
 このような状況が発生する理由：
@@ -756,139 +776,6 @@ ORDER BY country_count DESC, total_access DESC;
 
 </details>
 
-### 実装のポイント
+## 🎯 まとめ
 
-#### 1. SQLファイルの作成
-
-```bash
-# lambda/{team_id}/queries/ディレクトリに.sqlファイルを作成
-# 例: lambda/red/queries/suspicious_login.sql
-```
-
-#### 2. クエリのテスト
-
-書いたSQLはAthenaで直接テストできます：
-1. AWSコンソールでAthenaを開く
-2. データベース: `amazon_security_lake_glue_db_ap_northeast_1`
-3. クエリを実行して結果を確認
-
-#### 3. アラートメッセージの実装
-
-`main.go`の`AlertMessage`構造体に、トリアージに必要な情報を追加：
-
-```go
-type AlertMessage struct {
-    Title       string `json:"title"`
-    // TODO: 以下のようなフィールドを追加
-    // UserEmail   string `json:"user_email"`
-    // Count       int    `json:"count"`
-    // SourceIP    string `json:"source_ip"`
-    // Country     string `json:"country"`
-}
-```
-
-#### 4. 閾値判定の実装
-
-クエリ結果に基づいてアラートを送信するか判定：
-
-```go
-// 例: 結果が0件の場合はアラートを送信しない
-if len(results) == 0 {
-    continue
-}
-```
-
-### 提出チェックリスト
-
-- [ ] `queries/`ディレクトリに最低1つのSQLファイルを作成
-- [ ] Athenaでクエリが正常に動作することを確認
-- [ ] AlertMessage構造体に必要なフィールドを追加
-- [ ] アラート送信の閾値判定を実装
-- [ ] テスト実行でアラートがWarrenに表示されることを確認
-
-### テストとデバッグのヒント
-
-#### 1. Athena でのクエリテスト
-
-AWSコンソールで直接テストする方法：
-1. AWS Management Console → Athena
-2. データベース `amazon_security_lake_glue_db_ap_northeast_1` を選択
-3. 作成したSQLクエリを貼り付けて実行
-
-#### 2. ローカルでの単体テスト
-
-ローカル環境でLambda関数をテストしたい場合は、AWS APIキーを発行できます。
-
-**APIキーの発行を希望する場合**：
-- 講師に「ローカルテスト用のAWS APIキーが必要です」と伝えてください
-- 以下の権限が付与されたキーを発行します：
-  - Athenaクエリ実行権限
-  - S3読み取り権限（Security Lake）
-  - SNS発行権限（アラート送信）
-
-**ローカルテストの環境設定**：
-```bash
-# 発行されたキーを環境変数に設定
-export AWS_ACCESS_KEY_ID="発行されたキー"
-export AWS_SECRET_ACCESS_KEY="発行されたシークレット"
-export AWS_REGION="ap-northeast-1"
-
-# ローカルでテスト実行
-cd lambda/{team_id}
-go test -v
-```
-
-**単体テストの例**：
-```go
-// main_test.go
-func TestAlertMessageCreation(t *testing.T) {
-    // クエリ結果のモックデータ
-    mockResults := []map[string]string{
-        {
-            "user_email": "test@example.com",
-            "count": "10",
-            "source_ip": "192.0.2.1",
-        },
-    }
-    
-    // アラートメッセージの生成をテスト
-    alert := createAlertMessage("suspicious_login", mockResults)
-    
-    if alert.Title == "" {
-        t.Error("Alert title should not be empty")
-    }
-    
-    // 他のフィールドもテスト
-}
-```
-
-### ボーナス課題
-
-余裕がある方は以下のチャレンジにも挑戦してみましょう：
-
-#### 🎆 チャレンジ1: 複数の検知ルールの組み合わせ
-
-複数のクエリを作成し、それぞれの結果を統合してより高度な検知を実現してみましょう。
-
-#### 🎆 チャレンジ2: アラートの重要度判定
-
-検知結果に基づいてアラートの重要度（Critical/High/Medium/Low）を自動判定するロジックを実装してみましょう。
-
-#### 🎆 チャレンジ3: WITH句を使った高度な分析
-
-SQLのWITH句（CTE: Common Table Expression）を使って、過去のデータと比較した異常検知を実装してみましょう。
-
-### デバッグのポイント
-
-1. **CloudWatch Logsでログ確認**
-   - Lambda関数の実行ログを確認
-   - エラーメッセージやクエリ結果をチェック
-
-2. **Athenaでクエリを直接実行**
-   - SQLが正しいか確認
-   - 期待する結果が返ってくるか確認
-
-3. **アラートが表示されない場合**
-   - クエリ結果が0件でないか確認
-   - アラート送信ロジックを確認
-   - Warrenへの通信が成功しているか確認
+このセクションでは、Security Lakeのデータを活用した実践的な検知システムの実装方法を学びました。Lambda関数を使用してAthenaでSQLクエリを実行し、継続的な認証攻撃、大量データ窃取、異常なサービスアクセス、地理的に不可能なアクセスなど、様々な脅威パターンを検知するルールを作成できます。重要なのは、検知結果を適切にアラート化し、調査担当者が迅速に対応できる情報を含めることです。
