@@ -299,7 +299,7 @@ LIMIT 20;
 **🎯 ゴール**: 今日一日のGoogle Workspaceの各サービス利用状況を集計する。各サービスについて、総アクセス数、アクティブユーザー数、実行された操作種別数、最初と最後のアクセス時刻を表示する。アクセス数が10件以上のサービスのみを、アクセス数の多い順に表示する。
 
 **必要な条件**:
-- NULL除外: `api.service.name IS NOT NULL`
+- サービス名: `api.service.name`
 - フィルタ（10件以上）: `HAVING COUNT(*) >= 10`
 
 **この演習で新たに使う機能**
@@ -373,7 +373,7 @@ WITH 名前1 AS (
     -- 最初の処理
 ),
 名前2 AS (
-    -- 名前1の結果を使った処理  
+    -- 名前1の結果を使った処理
 )
 -- 最終的な結果を取得
 SELECT * FROM 名前2;
@@ -563,6 +563,7 @@ ORDER BY hour_jst;
 - どの時間帯に最も活発か
 - 通常と異なる時間帯の活動はあるか
 - 主にどんな操作をしているか
+- 時間の時（Hour）は `EXTRACT(HOUR FROM from_unixtime(t.time/1000) AT TIME ZONE 'Asia/Tokyo')` で抽出可能
 
 </details>
 
