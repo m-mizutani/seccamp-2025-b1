@@ -8,32 +8,38 @@
 
 また、セキュリティに限らず各種ログを収集するための仕組みも存在し、これらは監視だけでなく監査などの目的でも活用できます。
 
-### 1. マネージド脅威検知サービス（GuardDuty, Cloud Security Command Center等）
+### 1. マネージド脅威検知サービス（GuardDuty, Security Command Center等）
 
-📖 **AWS GuardDuty ログ例・出力形式**: [GuardDuty findings samples](https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-retired.html)
+📖 **AWS GuardDuty 検知例**: [GuardDuty findings samples](https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-retired.html)
 
 #### 検知可能な脅威タイプ
-
-**ネットワーク異常**
-- 暗号通貨マイニング通信
-- ボットネット通信
-- 異常なデータ転送・リクエスト量
 
 **マルウェア検知**
 - C&Cサーバー通信
 - DGA（Domain Generation Algorithm）検知
+- 暗号通貨マイニング通信
+- ボットネット通信
+
+**ネットワーク異常**
+- 異常なデータ転送・リクエスト量
 
 **不正アクセス**
 - ブルートフォース攻撃
 - 地理的異常アクセス
 
-#### **⚠️ 限界：汎用的な脅威のみ、組織固有ルール・ビジネスロジック依存の異常は検知不可**
+**ユーザ・アカウントの不審な振る舞い**
+- 不審なリソースの操作やAPI呼び出し
 
-**マネージドサービスが検知できない例**
-- 許可されていないリクエストの発生（設定ミス vs 攻撃前探索）
-- 業務時間外の特権アカウント使用（緊急対応 vs 不正使用の判別不可）
-- 部門を超えたデータアクセス（正当な業務 vs 情報窃取の判別不可）
-- 通常業務範囲内での異常パターン（営業データの大量ダウンロード等）
+#### ⚠️ 限界
+
+- **汎用的な脅威のみ、組織固有ルール・ビジネスロジック依存の異常は検知不可**
+  - 業務上想定された強い権限の操作、不審と見える操作の誤検知
+  - 許可されていないリクエストの発生（設定ミス vs 攻撃前探索）
+  - 部門を超えたデータアクセス（正当な業務 vs 情報窃取の判別不可）
+  - 通常業務範囲内での異常パターン（営業データの大量ダウンロード等）
+- **当該クラウド以外のデータは活用できない**
+  - 複合的に検知するルールなどは運用不可
+  - 必然的に、複数の検知サービスを使い分けることになってしまう
 
 ### 2. セキュリティ統合管理サービス（Security Hub, Security Command Center等）
 
@@ -42,6 +48,7 @@
 #### セキュリティ状況の一元管理
 
 **機能概要**
+- **CSPM（Cloud Security Posture Management）**：セキュリティ設定の監視
 - **多様なセキュリティツールの統合**: GuardDuty、Config、Inspector等の結果統合
 - **統一ダッシュボード**: セキュリティ状況の可視化
 - **AWS Security Finding Format (ASFF)**: 標準化フォーマットでの情報統合
@@ -134,7 +141,81 @@
 
 これらのログは各クラウドプラットフォームのストレージサービスやログ管理サービスに集約され、クエリ分析ツールやセキュリティ分析基盤での統合分析に活用されます。
 
-## プラットフォーム外から収集するべきデータ
+### 📊 （まとめ）AWSにおける取得可能なログと取得の構成
+
+```mermaid
+graph TB
+    subgraph "AWS インフラ監視データ収集ポイント"
+        subgraph "ネットワーク層"
+            VPC[VPC]
+            VPC --> VPCFL[VPC Flow Logs]
+            VPCFL --> VPCFL_DATA[取得データ:<br/>• 送信元/宛先IP<br/>• ポート番号<br/>• プロトコル<br/>• パケット数/バイト数<br/>• 通信の許可/拒否]
+            
+            R53[Route 53]
+            R53 --> R53QL[Query Logging]
+            R53QL --> R53_DATA[取得データ:<br/>• クエリされたドメイン名<br/>• クエリタイプ（A, AAAA等）<br/>• クライアントIP<br/>• レスポンスコード]
+            
+            ELB[Elastic Load Balancer]
+            ELB --> ELBAL[Access Logs]
+            ELBAL --> ELB_DATA[取得データ:<br/>• リクエストURL<br/>• HTTPステータス<br/>• User-Agent<br/>• リクエスト処理時間<br/>• バックエンド処理時間]
+        end
+        
+        subgraph "コンピュート層"
+            EC2[EC2 Instances]
+            EC2 --> CWA[CloudWatch Agent/fluentdなど]
+            CWA --> CW_DATA[取得データ:<br/>• システムメトリクス<br/>• カスタムメトリクス<br/>• アプリケーションログ]
+            
+            LAMBDA[Lambda Functions]
+            LAMBDA --> CWL[CloudWatch Logs]
+            CWL --> LAMBDA_DATA[取得データ:<br/>• 実行ログ<br/>• エラー/例外<br/>• 実行時間<br/>• メモリ使用量]
+        end
+        
+        subgraph "ストレージ層"
+            S3[S3 Buckets]
+            S3 --> S3AL[Access Logs]
+            S3AL --> S3_DATA[取得データ:<br/>• オブジェクトアクセス<br/>• リクエスター情報<br/>• 操作タイプ<br/>• エラーコード]
+            
+            RDS[RDS Databases]
+            RDS --> RDSAL[Audit Logs]
+            RDSAL --> RDS_DATA[取得データ:<br/>• SQLクエリ<br/>• 接続/切断<br/>• 権限変更<br/>• スキーマ変更]
+        end
+    end
+    
+    subgraph "ログ収集・保存"
+        VPCFL_DATA --> S3_BUCKET[S3バケット<br/>（ログ保存）]
+        R53_DATA --> S3_BUCKET
+        ELB_DATA --> S3_BUCKET
+        S3_DATA --> S3_BUCKET
+        
+        CW_DATA --> CWLOGS[CloudWatch Logs]
+        LAMBDA_DATA --> CWLOGS
+        RDS_DATA --> CWLOGS
+        
+        CWLOGS --> S3_BUCKET
+    end
+    
+    subgraph "分析・検知"
+        S3_BUCKET --> ATHENA[Athena<br/>（クエリ分析）]
+        S3_BUCKET --> GLUE[Glue<br/>（ETL処理）]
+        GLUE --> LAKE[(Security Lake)]
+        
+        ATHENA --> DETECT[検知ユースケース]
+        LAKE --> DETECT
+        
+        DETECT --> USE1[通信異常検知<br/>• 異常な通信先<br/>• 大量データ転送<br/>• 不審なポート]
+        DETECT --> USE2[DNS異常検知<br/>• DGAドメイン<br/>• DNS Tunneling<br/>• C&C通信]
+        DETECT --> USE3[Web攻撃検知<br/>• SQLインジェクション<br/>• XSS攻撃<br/>• 異常User-Agent]
+    end
+    
+    style VPC fill:#2196f3
+    style R53 fill:#ff9800
+    style ELB fill:#4caf50
+    style EC2 fill:#9c27b0
+    style S3 fill:#ff5722
+    style LAKE fill:#c8e6c9
+```
+
+## 🌐 プラットフォーム外から収集するべきデータ
 
 クラウドネイティブなログだけでは、組織全体のセキュリティ状況を把握することはできません。プラットフォーム外のデータソースからの情報収集が重要です。
 
@@ -213,79 +294,7 @@
 **入退室管理システム**: 物理アクセス、時間外入室、共連れ検知
 - 🏫 **無敗塾例**: 講師控室アクセス、サーバールーム入退室、学生の施設利用
 
-## AWSにおける取得可能なログと取得の構成
 
-```mermaid
-graph TB
-    subgraph "AWS インフラ監視データ収集ポイント"
-        subgraph "ネットワーク層"
-            VPC[VPC]
-            VPC --> VPCFL[VPC Flow Logs]
-            VPCFL --> VPCFL_DATA[取得データ:<br/>• 送信元/宛先IP<br/>• ポート番号<br/>• プロトコル<br/>• パケット数/バイト数<br/>• 通信の許可/拒否]
-            
-            R53[Route 53]
-            R53 --> R53QL[Query Logging]
-            R53QL --> R53_DATA[取得データ:<br/>• クエリされたドメイン名<br/>• クエリタイプ（A, AAAA等）<br/>• クライアントIP<br/>• レスポンスコード]
-            
-            ELB[Elastic Load Balancer]
-            ELB --> ELBAL[Access Logs]
-            ELBAL --> ELB_DATA[取得データ:<br/>• リクエストURL<br/>• HTTPステータス<br/>• User-Agent<br/>• リクエスト処理時間<br/>• バックエンド処理時間]
-        end
-        
-        subgraph "コンピュート層"
-            EC2[EC2 Instances]
-            EC2 --> CWA[CloudWatch Agent/fluentdなど]
-            CWA --> CW_DATA[取得データ:<br/>• システムメトリクス<br/>• カスタムメトリクス<br/>• アプリケーションログ]
-            
-            LAMBDA[Lambda Functions]
-            LAMBDA --> CWL[CloudWatch Logs]
-            CWL --> LAMBDA_DATA[取得データ:<br/>• 実行ログ<br/>• エラー/例外<br/>• 実行時間<br/>• メモリ使用量]
-        end
-        
-        subgraph "ストレージ層"
-            S3[S3 Buckets]
-            S3 --> S3AL[Access Logs]
-            S3AL --> S3_DATA[取得データ:<br/>• オブジェクトアクセス<br/>• リクエスター情報<br/>• 操作タイプ<br/>• エラーコード]
-            
-            RDS[RDS Databases]
-            RDS --> RDSAL[Audit Logs]
-            RDSAL --> RDS_DATA[取得データ:<br/>• SQLクエリ<br/>• 接続/切断<br/>• 権限変更<br/>• スキーマ変更]
-        end
-    end
-    
-    subgraph "ログ収集・保存"
-        VPCFL_DATA --> S3_BUCKET[S3バケット<br/>（ログ保存）]
-        R53_DATA --> S3_BUCKET
-        ELB_DATA --> S3_BUCKET
-        S3_DATA --> S3_BUCKET
-        
-        CW_DATA --> CWLOGS[CloudWatch Logs]
-        LAMBDA_DATA --> CWLOGS
-        RDS_DATA --> CWLOGS
-        
-        CWLOGS --> S3_BUCKET
-    end
-    
-    subgraph "分析・検知"
-        S3_BUCKET --> ATHENA[Athena<br/>（クエリ分析）]
-        S3_BUCKET --> GLUE[Glue<br/>（ETL処理）]
-        GLUE --> LAKE[(Security Lake)]
-        
-        ATHENA --> DETECT[検知ユースケース]
-        LAKE --> DETECT
-        
-        DETECT --> USE1[通信異常検知<br/>• 異常な通信先<br/>• 大量データ転送<br/>• 不審なポート]
-        DETECT --> USE2[DNS異常検知<br/>• DGAドメイン<br/>• DNS Tunneling<br/>• C&C通信]
-        DETECT --> USE3[Web攻撃検知<br/>• SQLインジェクション<br/>• XSS攻撃<br/>• 異常User-Agent]
-    end
-    
-    style VPC fill:#2196f3
-    style R53 fill:#ff9800
-    style ELB fill:#4caf50
-    style EC2 fill:#9c27b0
-    style S3 fill:#ff5722
-    style LAKE fill:#c8e6c9
-```
 
 ## 🎯 カスタム検知が必要な実例とビジネスケース
 
@@ -327,3 +336,7 @@ graph TB
 - **アクセスパターン**: 業務時間内だが通常アクセスしないサーバー群への順次接続
 - **データアクセス**: ファイル共有への異常な大量アクセス
 - **時系列相関**: 短時間での複数システム探索行動
+
+## 📝 まとめ
+
+クラウドプラットフォームが提供するマネージドセキュリティサービスは汎用的な脅威検知には優れていますが、組織固有のビジネスロジックや内部者による不正など、文脈を考慮した検知には限界があります。効果的なセキュリティ監視には、クラウド内外の多様なログソースを統合し、組織の業務パターンやコンプライアンス要件に合わせたカスタム検知ルールの実装が不可欠です。
