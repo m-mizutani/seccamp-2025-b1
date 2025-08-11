@@ -4,15 +4,15 @@
 
 このパートでは、Security Lake に蓄積されたログデータを AWS Athena を使って探索し、OCSF（Open Cybersecurity Schema Framework）形式のデータ構造を実際のデータを通じて理解します。基本的な SQL クエリから始めて、段階的により複雑な分析へと進めていきます。
 
-## AWS コンソールでの実践的データ探索
+## 🔍 AWS コンソールでの実践的データ探索
 
-### 1. Athena コンソールでの基本操作
+### 📋 1. Athena コンソールでの基本操作
 
 - ログインページ https://145287089436.signin.aws.amazon.com/console
 - アカウントID: `145287089436`
 - ログインしたら右上のRegionから `Asia Pacific (Tokyo)` を選択 ← 重要
 
-### 2. Athena コンソールへのアクセス
+### 🚀 2. Athena コンソールへのアクセス
 
 - AWSコンソールの左上テキストボックスから `athena` と入力してサービスを開く
   - その後、 `Launch query editor` を開く
@@ -33,7 +33,7 @@ WHERE eventday = date_format(current_date, '%Y%m%d');
 - Database:`amazon_security_lake_glue_db_ap_northeast_1`
 - Table: `amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0`
 
-### 3. Security Lake テーブルの確認
+### 🗄️ 3. Security Lake テーブルの確認
 
 [log_schema.md](log_schema.md) を参考にしつつスキーマを確認しましょう。
 
@@ -78,9 +78,9 @@ LIMIT 100;
 - UTCベースの日付となります。今回の実習では `20250812` という値になります
 - このフィールドは一般的なものではありませんが、インデックスやパーティションの利用自体は多くのDWH、DBでも利用されています
 
-## データ検索の練習
+## 📊 データ検索の練習
 
-### Step 1: まずログとして見てみる
+### 👀 Step 1: まずログとして見てみる
 
 #### 📝 1-1. 10分以内に発生したダウンロードのログ一覧を見る
 
@@ -219,7 +219,7 @@ LIMIT 1000;
 
 </details>
 
-### Step 2: 統計情報を見てみる
+### 📊 Step 2: 統計情報を見てみる
 
 **2-1. Google Driveのファイル読み取り回数が多い人、上位20人を見てみる**
 
@@ -440,7 +440,7 @@ LIMIT 10;
 
 </details>
 
-### Step 3: 時間帯による傾向の詳細分析 (Optional)
+### ⏰ Step 3: 時間帯による傾向の詳細分析 (Optional)
 
 #### 📝 3-1. 時間帯別のアクティビティ分析**
 
@@ -614,7 +614,7 @@ ORDER BY user_email, hour_jst;
 
 </details>
 
-### 練習問題
+### 📝 練習問題
 
 上記のクエリを参考に、以下の課題を解いてみましょう。
 
@@ -716,7 +716,7 @@ ORDER BY access_count DESC;
 
 </details>
 
-### SQLクエリを書く際のヒント
+### 💡 SQLクエリを書く際のヒント
 
 1. **まずは小さく始める**: LIMIT 10 などで結果を制限して、データの形を確認
 2. **段階的に条件を追加**: WHERE句の条件を1つずつ追加して結果を確認
@@ -724,7 +724,7 @@ ORDER BY access_count DESC;
 4. **パフォーマンスを意識**: eventday でパーティションを指定することを忘れずに
 5. **段階的な分析**: 複雑なクエリは段階的に分解して、読みやすく保守しやすいコードに
 
-## まとめ
+## 🎯 まとめ
 
 AWS AthenaとSecurity Lakeに蓄積されたOCSF形式のログデータを活用することで、複雑なセキュリティ分析が可能になります。基本的なSQLクエリから始めて、GROUP BYによる集計、WITH句を使った段階的な分析、時間帯パターンの把握など、さまざまな手法を組み合わせることで、通常のアクティビティのベースラインを理解し、異常な行動を発見するための基礎を築くことができます。
 
