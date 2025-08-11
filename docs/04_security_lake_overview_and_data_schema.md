@@ -48,20 +48,15 @@ AWS Security Lakeは、セキュリティログを一元管理するためのマ
 
 **ダミーAPIへのアクセス**
 ```
-curl "https://b66hcc5aulnbshfnpuxofpzuxa0busxv.lambda-url.ap-northeast-1.on.aws/?startTime=2025-07-19T00:00:00Z&endTime=2025-07-19T00:05:00Z&offset=0&limit=2" | jq
+curl "https://b66hcc5aulnbshfnpuxofpzuxa0busxv.lambda-url.ap-northeast-1.on.aws/?startTime=2025-08-12T00:00:00Z&endTime=2025-08-12T00:05:00Z&offset=0&limit=2" | jq
 ```
 
-**ログのフォーマット**
-[log_format.md](log_format.md)
+**リソース**
 
-**Lambda**
-https://ap-northeast-1.console.aws.amazon.com/lambda/home?region=ap-northeast-1#/functions/seccamp2025-b1-importer?tab=code
-
-**Lambdaのコード**
-https://github.com/m-mizutani/seccamp-2025-b1/blob/main/terraform/lambda/importer/main.go
-
-**S3バケット**
-https://ap-northeast-1.console.aws.amazon.com/s3/buckets/seccamp2025-b1-raw-logs?region=ap-northeast-1&bucketType=general&tab=objects
+- **ログのフォーマット**: [log_format.md](log_format.md)
+- **Lambda**: [AWS console](https://ap-northeast-1.console.aws.amazon.com/lambda/home?region=ap-northeast-1#/functions/seccamp2025-b1-importer?tab=code)
+- **Lambdaのコード**: [GitHub](https://github.com/m-mizutani/seccamp-2025-b1/blob/main/terraform/lambda/importer/main.go)
+- **S3バケット**: [AWS console](https://ap-northeast-1.console.aws.amazon.com/s3/buckets/seccamp2025-b1-raw-logs?region=ap-northeast-1&bucketType=general&tab=objects)
 
 ### ✅ 変換フェーズ
 
@@ -69,35 +64,13 @@ https://ap-northeast-1.console.aws.amazon.com/s3/buckets/seccamp2025-b1-raw-logs
 - JSONL形式からOCSF Parquet形式に変換
 - Security Lakeに標準化されたデータを格納
 
-**Lambda**
-https://ap-northeast-1.console.aws.amazon.com/lambda/home?region=ap-northeast-1#/functions/seccamp2025-b1-converter?tab=code
+**リソース**
+- **Lambda** [AWS console](https://ap-northeast-1.console.aws.amazon.com/lambda/home?region=ap-northeast-1#/functions/seccamp2025-b1-converter?tab=code)
+- **Lambdaのコード**: [GitHub](https://github.com/m-mizutani/seccamp-2025-b1/blob/main/terraform/lambda/converter/main.go)
+- **Security LakeのS3バケット**: [AWS console](https://ap-northeast-1.console.aws.amazon.com/s3/buckets/aws-security-data-lake-ap-northeast-1-bx7uskyh5pxj5xuil96uhdrfc?region=ap-northeast-1&tab=objects&bucketType=general)
+- **Glueの実行結果**: [AWS console](https://ap-northeast-1.console.aws.amazon.com/glue/home?region=ap-northeast-1#/v2/data-catalog/tables/view/amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0?database=amazon_security_lake_glue_db_ap_northeast_1&catalogId=145287089436&versionId=latest)
 
-**Lambdaのコード**
-https://github.com/m-mizutani/seccamp-2025-b1/blob/main/terraform/lambda/converter/main.go
-
-**Security LakeのS3バケット**
-https://ap-northeast-1.console.aws.amazon.com/s3/buckets/aws-security-data-lake-ap-northeast-1-bx7uskyh5pxj5xuil96uhdrfc?region=ap-northeast-1&tab=objects&bucketType=general
-
-**Glueの実行結果**
-https://ap-northeast-1.console.aws.amazon.com/glue/home?region=ap-northeast-1#/v2/data-catalog/tables/view/amazon_security_lake_table_ap_northeast_1_ext_google_workspace_1_0?database=amazon_security_lake_glue_db_ap_northeast_1&catalogId=145287089436&versionId=latest
-
-### ☑️ 検知フェーズ
-
-今日の実習のメインはここ
-
-- 定期的にDetection Lambdaが実行（という想定）
-- AthenaでSQLクエリを実行し異常を検知
-- 検知結果をSNSで通知
-
-
-### ✅ 対応フェーズ
-
-- 通知されたSNSからアラートが生成される
-- 今回のチケットシステム: https://warren-171198963743.asia-northeast1.run.app/alerts
-- 具体的な対応はやらないが、対応に必要なプロセスは考えてもらう
-
-### Security Lakeのデータ構造
-
+Security Lakeのデータ構造
 ```
 aws-security-data-lake-{region}-{random}/
 └── ext/
@@ -108,6 +81,20 @@ aws-security-data-lake-{region}-{random}/
                     └── eventDay={YYYYMMDD}/
                         └── *.parquet
 ```
+
+### ☑️ 検知フェーズ
+
+今日の実習のメインはここ
+
+- 定期的にDetection Lambdaが実行（という想定）
+- AthenaでSQLクエリを実行し異常を検知
+- 検知結果をSNSで通知
+
+### ✅ 対応フェーズ
+
+- 通知されたSNSからアラートが生成される
+- 今回のチケットシステム: https://warren-171198963743.asia-northeast1.run.app/alerts
+- 具体的な対応はやらないが、対応に必要なプロセスは考えてもらう
 
 ## OCSFスキーマの理解
 
@@ -190,4 +177,8 @@ https://schema.ocsf.io/
 #### status_id（ステータス）
 - 1: Success（成功）
 - 2: Failure（失敗）- login_failure、access_deniedなど
+
+## まとめ
+
+AWS Security Lakeは、OCSF標準スキーマを採用してセキュリティログを一元管理するマネージドサービスです。Google WorkspaceなどのカスタムログソースをOCSF形式に変換し、Parquetファイルとして効率的に保存することで、Athenaを使用した高速なSQL分析が可能になります。統一されたスキーマにより、異なるソースのログを横断的に分析し、高度なセキュリティ監視を実現できます。
 
