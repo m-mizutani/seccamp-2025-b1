@@ -10,16 +10,4 @@ variable "aws_region" {
   default     = "ap-northeast-1"
 }
 
-variable "enable_external_subscriber" {
-  description = "Enable external subscriber for Security Lake"
-  type        = bool
-  default     = false
-}
-
 # Team variable removed - using shared resources only
-
-variable "enable_active_resources" {
-  description = "Enable active resources like Lambda URLs and scheduled executions"
-  type        = bool
-  default     = true
-}

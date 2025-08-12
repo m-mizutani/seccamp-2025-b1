@@ -168,41 +168,6 @@ resource "aws_iam_role_policy_attachment" "security_lake_crawler_glue" {
 }
 
 ###########################################
-# Security Lake Subscriber (Optional)
-###########################################
-
-# Subscriber for external analysis tools
-resource "aws_securitylake_subscriber" "external_analytics" {
-  count = var.enable_external_subscriber ? 1 : 0
-
-  subscriber_name        = "${var.basename}-external-analytics"
-  subscriber_description = "External analytics tools subscriber"
-
-  source {
-    custom_log_source_resource {
-      source_name    = aws_securitylake_custom_log_source.google_workspace.source_name
-      source_version = aws_securitylake_custom_log_source.google_workspace.source_version
-    }
-  }
-
-  subscriber_identity {
-    external_id = "external-analytics-${random_id.external_id.hex}"
-    principal   = data.aws_caller_identity.current.account_id
-  }
-
-  access_type = "LAKEFORMATION"
-
-  depends_on = [
-    aws_securitylake_custom_log_source.google_workspace
-  ]
-
-  tags = merge(local.common_tags, {
-    Name = "${var.basename}-external-analytics-subscriber"
-    Type = "security-lake-subscriber"
-  })
-}
-
-###########################################
 # Outputs
 ###########################################
 

@@ -22,7 +22,7 @@ output "security_lake_bucket" {
 
 output "auditlog_lambda_url" {
   description = "URL for the AuditLog Lambda Function"
-  value       = var.enable_active_resources && length(aws_lambda_function_url.auditlog) > 0 ? aws_lambda_function_url.auditlog[0].function_url : "Disabled in development mode"
+  value       = aws_lambda_function_url.auditlog.function_url
 }
 
 # Shared resource outputs
@@ -76,7 +76,3 @@ output "detector_lambda_role_name" {
 #   value       = aws_glue_catalog_database.main.name
 # }
 
-output "active_resources_enabled" {
-  description = "Whether active resources are enabled"
-  value       = var.enable_active_resources
-}

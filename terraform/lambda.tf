@@ -312,8 +312,6 @@ resource "aws_lambda_function" "auditlog" {
 
 # Lambda Function URL for public access
 resource "aws_lambda_function_url" "auditlog" {
-  count = var.enable_active_resources ? 1 : 0
-
   function_name      = aws_lambda_function.auditlog.function_name
   authorization_type = "NONE"
 
@@ -381,7 +379,7 @@ resource "aws_lambda_function" "importer" {
 
   environment {
     variables = {
-      AUDITLOG_URL   = var.enable_active_resources && length(aws_lambda_function_url.auditlog) > 0 ? aws_lambda_function_url.auditlog[0].function_url : ""
+      AUDITLOG_URL   = aws_lambda_function_url.auditlog.function_url
       S3_BUCKET_NAME = aws_s3_bucket.raw_logs.bucket
     }
   }
