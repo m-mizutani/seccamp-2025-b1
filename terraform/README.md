@@ -45,7 +45,66 @@ aws s3api put-bucket-versioning \
 - 空文字列のチームはスキップされます
 - このファイルはgitに登録されているため、実際のユーザー名を設定する場合は注意してください
 
-### 3. terraform.tfvars の作成（オプション）
+### 3. AuditLog Lambda用のシードデータの準備
+
+AuditLog Lambdaは、テスト用ログデータを生成するためのシードファイルを必要とします。シードデータは `tools/loggen` を使用して生成します。
+
+#### シードデータの生成とアップロード
+
+1. **loggenツールのビルド**：
+   ```bash
+   cd tools/loggen
+   go build -o loggen
+   ```
+
+2. **シードデータの生成**：
+   ```bash
+   # デフォルト設定でローカルに生成
+   ./loggen generate
+   
+   # 特定の日付でシードを生成
+   ./loggen generate --date 2024-08-12
+   
+   # 異常ログの比率を変更（デフォルト: 15%）
+   ./loggen generate --anomaly-ratio 0.20
+   ```
+
+3. **S3へ直接アップロード（推奨）**：
+   ```bash
+   # Terraformデプロイ完了後に実行
+   # 圧縮バイナリ形式でS3に直接出力
+   ./loggen generate \
+     --output s3://seccamp2025-b1-auditlog-seeds/ \
+     --format binary-compressed
+   ```
+
+   または、既存のファイルをアップロード：
+   ```bash
+   aws s3 cp ./output/seeds/day_2024-08-12.bin.gz \
+     s3://seccamp2025-b1-auditlog-seeds/seeds/large-seed.bin.gz
+   ```
+
+#### 生成されるログデータ
+
+loggenは以下の異常パターンを含むログデータを生成します：
+
+**時間帯限定パターン**：
+- 夜間の管理者による大量ダウンロード（18:00-9:00）
+- 外部リンクアクセスバースト（10:00-16:00）
+- VPN経由の水平移動攻撃（9:00-18:00）
+
+**常時発生型パターン**（24時間検知可能）：
+- 高頻度認証攻撃（1分に3-5回の認証失敗）
+- 超高速データ窃取（1分に10-15件のダウンロード）
+- マルチサービス不正アクセス（複数サービスへの探索）
+- 地理的同時アクセス（2カ国から同時操作）
+
+**注意**: 
+- シードファイルが配置されていない場合、AuditLog Lambdaはエラーを返します
+- シードファイルは圧縮形式（.bin.gz）である必要があります
+- Lambda側は `seeds/large-seed.bin.gz` というファイル名を期待しています
+
+### 4. terraform.tfvars の作成（オプション）
 
 デフォルト値を変更する場合は、`terraform.tfvars` ファイルを作成します：
 
@@ -89,6 +148,24 @@ Lambda関数のコードを変更した場合、Terraformが自動的に再ビ�
 # コード変更後
 terraform apply
 ```
+
+### 5. シードデータのアップロード（初回のみ）
+
+デプロイ完了後、AuditLog Lambda用のシードデータをS3にアップロードします：
+
+```bash
+# tools/loggenを使用して直接S3にアップロード（推奨）
+cd tools/loggen
+./loggen generate \
+  --output s3://seccamp2025-b1-auditlog-seeds/ \
+  --format binary-compressed
+
+# または、既存のシードファイルをアップロード
+aws s3 cp ./output/seeds/day_2024-08-12.bin.gz \
+  s3://seccamp2025-b1-auditlog-seeds/seeds/large-seed.bin.gz
+```
+
+これにより、AuditLog Lambdaがテストログを生成できるようになります。
 
 ## zenv を使用する場合
 
