@@ -30,6 +30,7 @@ https://www.ipa.go.jp/jinzai/security-camp/2025/camp/zenkoku/program/b.html
 
 ### 関連資料
 
+- [環境構築](./terraform/README.md)
 - [事前準備](./preparation.md)
 - [講義概略](./outline.md)
 
